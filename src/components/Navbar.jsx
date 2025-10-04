@@ -77,6 +77,20 @@ export default function Navbar() {
             <span className="relative">Dashboard</span>
           </Link>
 
+          <Link
+            to="/ai-interaction"
+            className={`relative px-4 py-2 rounded-full font-medium transition-all ${
+              isActive('/ai-interaction')
+                ? 'text-white'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            {isActive('/ai-interaction') && (
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/25 to-pink-500/25 rounded-full border border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.25)]"></div>
+            )}
+            <span className="relative">AI Companion</span>
+          </Link>
+
           {!user ? (
             <Link
               to="/signin"

@@ -120,10 +120,10 @@ export default function Dashboard() {
       try {
         await cloudinaryStorage.deleteAnalysis(user.uid, analysisId);
         
-        // Remove from local state
+        
         setAnalyses(prev => prev.filter(a => (a.analysisId || a.id) !== analysisId));
         
-        // Clear selected analysis if it was deleted
+       
         setSelectedAnalysis(prev => {
           if (prev && (prev.analysisId || prev.id) === analysisId) {
             return null;

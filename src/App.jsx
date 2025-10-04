@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Analyze from './pages/Analyze';
 import Dashboard from './pages/Dashboard';
 import SignIn from './pages/SignIn';
+import AIInteraction from './pages/AIInteraction';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -22,6 +23,7 @@ function App() {
         <Route path="/analyze" element={<Analyze />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/signin" element={<SignIn />} />
+        <Route path="/ai-interaction" element={<AIInteraction />} />
       </Routes>
     </Router>
   );

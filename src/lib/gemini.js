@@ -1,11 +1,17 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+
+// Initialize Gemini AI
+let genAI = null;
+if (GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 export async function generatePresentationSummary(comprehensiveData) {
   console.log('Gemini API Key available:', !!GEMINI_API_KEY);
-  console.log('API Endpoint:', GEMINI_ENDPOINT);
   
-  if (!GEMINI_API_KEY) {
+  if (!GEMINI_API_KEY || !genAI) {
     console.warn('Gemini API key not configured');
     return null;
   }
@@ -150,18 +156,24 @@ Generate a comprehensive analysis with dynamic scoring (0-100 range) based on th
   }
 }`;
 
-    const body = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 800,
-      },
-    };
+    // Get the generative model with fallback
+    const modelCandidates = ['gemini-2.5-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+    let model = null;
+    
+    for (const modelName of modelCandidates) {
+      try {
+        model = genAI.getGenerativeModel({ model: modelName });
+        console.log(`Using model: ${modelName}`);
+        break;
+      } catch (error) {
+        console.log(`Model ${modelName} not available, trying next...`);
+        continue;
+      }
+    }
+    
+    if (!model) {
+      throw new Error('No working Gemini model found. Please check your API key and available models.');
+    }
 
     console.log('Calling Gemini API with comprehensive data:', comprehensiveData);
     console.log('Raw metrics for AI analysis:', {
@@ -191,25 +203,12 @@ Generate a comprehensive analysis with dynamic scoring (0-100 range) based on th
       });
     }
     
-    const response = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log('Gemini API response:', data);
-    
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
     
     if (!text) {
-      console.error('No text in Gemini response:', data);
+      console.error('No text in Gemini response');
       return null;
     }
     
