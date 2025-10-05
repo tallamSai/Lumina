@@ -1,5 +1,8 @@
 # Lumina
 
+**Team: ONLY_FLAGS**  
+*Built for the Hackathon*
+
 Lumina is an advanced AI-powered platform for real-time presentation and interview coaching. It leverages state-of-the-art AI models (Google Gemini, TensorFlow, MediaPipe, and more) to analyze your speech, body language, and delivery, providing actionable feedback and personalized coaching to help you excel in presentations and interviews.
 
 ---
@@ -128,3 +131,5 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 - Google Gemini, TensorFlow, MediaPipe, and the open-source community.
 - Inspired by the need for accessible, AI-driven communication coaching.
+- **Special thanks to the hackathon organizers and all participants.**
+- **Project by Team ONLY_FLAGS.**
