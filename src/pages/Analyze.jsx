@@ -547,30 +547,30 @@ cl
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-900/0 to-slate-950/0"></div>
+    <div className="min-h-screen bg-transparent">
+      <div className="absolute inset-0 bg-transparent"></div>
 
       <Navbar />
 
       <main className="relative max-w-6xl mx-auto px-6 pt-32 pb-20">
         <div className="text-center mb-12">
-          <h2 className="text-5xl font-bold text-white mb-3">Analyze Your Presentation</h2>
-          <p className="text-slate-400 text-lg">Record a new video or upload an existing one for AI analysis</p>
+          <h2 className="text-5xl font-bold text-black mb-3">Analyze Your Presentation</h2>
+          <p className="text-black text-lg">Record a new video or upload an existing one for AI analysis</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          <div className="group relative bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 hover:border-blue-500/50 transition-all">
+          <div className="group relative bg-transparent border border-black/10 rounded-2xl p-8 hover:border-blue-500/50 transition-all">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <div className="relative">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-2 rounded-lg">
-                  <Video className="text-blue-400" size={24} />
+                <div className="p-2 rounded-lg">
+                  <Video className="text-blue-600" size={24} />
                 </div>
-                <h3 className="text-2xl font-bold text-white">Record Video</h3>
+                <h3 className="text-2xl font-bold text-black">Record Video</h3>
               </div>
-              <p className="text-slate-400 mb-6">Use your webcam to record a presentation</p>
+              <p className="text-black mb-6">Use your webcam to record a presentation</p>
 
-              <div className="bg-slate-950 rounded-xl overflow-hidden mb-4 border border-slate-800" style={{ height: '240px' }}>
+              <div className="bg-transparent rounded-xl overflow-hidden mb-4 border border-black/10" style={{ height: '240px' }}>
                 <video
                   ref={videoRef}
                   className="w-full h-full object-cover"
@@ -651,29 +651,29 @@ cl
             </div>
           </div>
 
-          <div className="group relative bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 hover:border-cyan-500/50 transition-all">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <div className="group relative bg-transparent border border-black/10 rounded-2xl p-8 hover:border-cyan-500/50 transition-all">
+            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <div className="relative">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 p-2 rounded-lg">
-                  <Upload className="text-cyan-400" size={24} />
+                <div className="p-2 rounded-lg">
+                  <Upload className="text-blue-600" size={24} />
                 </div>
-                <h3 className="text-2xl font-bold text-white">Upload Video</h3>
+                <h3 className="text-2xl font-bold text-black">Upload Video</h3>
               </div>
-              <p className="text-slate-400 mb-6">Upload a pre-recorded presentation video</p>
+              <p className="text-black mb-6">Upload a pre-recorded presentation video</p>
 
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-slate-950 rounded-xl border-2 border-dashed border-slate-700 hover:border-cyan-400/50 transition-all cursor-pointer mb-4 flex items-center justify-center"
+                className="bg-transparent rounded-xl border-2 border-dashed border-black/10 hover:border-cyan-500/50 transition-all cursor-pointer mb-4 flex items-center justify-center"
                 style={{ height: '240px' }}
               >
                 {uploadedVideo ? (
-                  <video src={uploadedVideo} className="w-full h-full object-cover rounded-xl" controls />
+                  <video src={uploadedVideo} className="w-full h-full object-cover rounded-xl bg-transparent" controls />
                 ) : (
                   <div className="text-center">
-                    <Upload className="text-slate-600 mx-auto mb-3" size={48} />
-                    <p className="text-slate-400 font-medium">Click to upload video</p>
-                    <p className="text-slate-500 text-sm mt-1">MP4, WebM, or MOV</p>
+                    <Upload className="text-black mx-auto mb-3" size={48} />
+                    <p className="text-black font-medium">Click to upload video</p>
+                    <p className="text-black text-sm mt-1">MP4, WebM, or MOV</p>
                   </div>
                 )}
               </div>

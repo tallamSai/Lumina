@@ -184,8 +184,8 @@ SpeakCoach AI - Elevate Your Presentation Skills
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-900/0 to-slate-950/0"></div>
+    <div className="min-h-screen bg-white">
+      <div className="absolute inset-0 bg-white"></div>
 
       <Navbar />
 
@@ -207,12 +207,12 @@ SpeakCoach AI - Elevate Your Presentation Skills
         </div>
 
         {analyses.length === 0 ? (
-          <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-16 text-center">
-            <div className="bg-gradient-to-br from-slate-700/50 to-slate-800/50 w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <AlertCircle className="text-slate-500" size={48} />
+          <div className="bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-16 text-center">
+            <div className="bg-gradient-to-br from-blue-100 to-blue-200 w-24 h-24 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="text-blue-600" size={48} />
             </div>
-            <h3 className="text-3xl font-bold text-white mb-3">No Analyses Yet</h3>
-            <p className="text-slate-400 text-lg mb-8">Start by recording or uploading a presentation video</p>
+            <h3 className="text-3xl font-bold text-gray-900 mb-3">No Analyses Yet</h3>
+            <p className="text-gray-600 text-lg mb-8">Start by recording or uploading a presentation video</p>
             <Link
               to="/analyze"
               className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-semibold px-8 py-4 rounded-xl transition-all shadow-lg shadow-blue-500/25"
@@ -224,15 +224,15 @@ SpeakCoach AI - Elevate Your Presentation Skills
         ) : (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-3">
-              <h3 className="text-xl font-bold text-white mb-4 px-1">Your Presentations</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-4 px-1">Your Presentations</h3>
               {analyses.map((analysis) => (
                 <div
                   key={analysis.id}
                   onClick={() => setSelectedAnalysis(analysis)}
-                  className={`relative group bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border rounded-xl p-4 cursor-pointer transition-all ${
+                  className={`relative group bg-white/80 backdrop-blur-sm border rounded-xl p-4 cursor-pointer transition-all ${
                     selectedAnalysis?.id === analysis.id
-                      ? 'border-blue-500/50 shadow-lg shadow-blue-500/10'
-                      : 'border-slate-700/50 hover:border-slate-600/50'
+                      ? 'border-blue-400/60 shadow-lg shadow-blue-500/10'
+                      : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   {selectedAnalysis?.id === analysis.id && (
@@ -240,7 +240,7 @@ SpeakCoach AI - Elevate Your Presentation Skills
                   )}
                   <div className="relative">
                     <div className="flex items-start justify-between mb-2">
-                      <h4 className="text-white font-semibold pr-2">{analysis.title}</h4>
+                      <h4 className="text-gray-900 font-semibold pr-2">{analysis.title}</h4>
                       <div className="flex items-center gap-2">
                         <div className={`text-2xl font-bold ${getScoreColor(analysis.overallScore)} whitespace-nowrap`}>
                           {analysis.overallScore}
@@ -250,7 +250,7 @@ SpeakCoach AI - Elevate Your Presentation Skills
                             e.stopPropagation();
                             deleteAnalysis(analysis.analysisId || analysis.id);
                           }}
-                          className="text-red-400 hover:text-red-300 transition-colors p-1 hover:bg-red-500/10 rounded"
+                          className="text-red-500 hover:text-red-400 transition-colors p-1 hover:bg-red-500/10 rounded"
                           title="Delete analysis"
                         >
                           <Trash2 size={16} />
@@ -258,13 +258,13 @@ SpeakCoach AI - Elevate Your Presentation Skills
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <div className="flex items-center gap-2 text-gray-500 text-sm">
                         <Calendar size={14} />
                         {new Date(analysis.date || analysis.timestamp).toLocaleDateString()}
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="flex items-center gap-1 text-xs text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full">
-                          <div className="w-2 h-2 bg-cyan-400 rounded-full"></div>
+                        <div className="flex items-center gap-1 text-xs text-cyan-600 bg-cyan-500/10 px-2 py-1 rounded-full">
+                          <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
                           Cloudinary
                         </div>
                       </div>
@@ -277,11 +277,11 @@ SpeakCoach AI - Elevate Your Presentation Skills
             <div className="lg:col-span-2">
               {selectedAnalysis ? (
                 <div className="space-y-6">
-                  <div className="relative bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8">
+                  <div className="relative bg-white/80 backdrop-blur-sm border border-gray-200 rounded-2xl p-8">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent rounded-2xl"></div>
                     <div className="relative">
                       <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-3xl font-bold text-white">{selectedAnalysis.title}</h3>
+                        <h3 className="text-3xl font-bold text-gray-900">{selectedAnalysis.title}</h3>
                         <button
                           onClick={() => downloadReport(selectedAnalysis)}
                           className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold px-5 py-3 rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-green-500/25"
@@ -298,16 +298,16 @@ SpeakCoach AI - Elevate Your Presentation Skills
                             {selectedAnalysis.overallScore}
                           </div>
                         </div>
-                        <p className="text-slate-400 text-lg">Overall Score</p>
+                        <p className="text-gray-600 text-lg">Overall Score</p>
                       </div>
 
                       {/* Video Preview Section */}
                       {(selectedAnalysis.videoUrl || selectedAnalysis.videoDataUrl) && (
-                        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-6 mb-6">
-                          <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                            <Video className="text-blue-400" size={20} />
+                        <div className="bg-white/70 border border-gray-200 rounded-xl p-6 mb-6">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                            <Video className="text-blue-600" size={20} />
                             Presentation Video
-                            <span className="text-xs text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded-full">
+                            <span className="text-xs text-cyan-600 bg-cyan-500/10 px-2 py-1 rounded-full">
                               Cloudinary
                             </span>
                           </h4>
@@ -315,7 +315,7 @@ SpeakCoach AI - Elevate Your Presentation Skills
                             <video
                               src={selectedAnalysis.videoUrl || selectedAnalysis.videoDataUrl}
                               controls
-                              className="w-full h-64 object-cover rounded-lg bg-slate-900"
+                              className="w-full h-64 object-cover rounded-lg bg-gray-100"
                               poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjI0MCIgdmlld0JveD0iMCAwIDMyMCAyNDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMjQwIiBmaWxsPSIjMTE0MTU0Ii8+CjxwYXRoIGQ9Ik0xMjggMTYwTDE2MCAxNDRMMTI4IDEyOFYxNjBaIiBmaWxsPSIjNjM2NkY3Ii8+Cjwvc3ZnPgo="
                               onError={(e) => {
                                 console.log('Video failed to load:', selectedAnalysis.videoUrl || selectedAnalysis.videoDataUrl);
@@ -334,26 +334,26 @@ SpeakCoach AI - Elevate Your Presentation Skills
                       )}
 
                       <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-5">
-                          <p className="text-slate-500 text-sm mb-2">Voice Clarity</p>
+                        <div className="bg-white/70 border border-gray-200 rounded-xl p-5">
+                          <p className="text-gray-500 text-sm mb-2">Voice Clarity</p>
                           <div className={`text-3xl font-bold ${getScoreColor(selectedAnalysis.voiceClarity)}`}>
                             {selectedAnalysis.voiceClarity}/100
                           </div>
                         </div>
-                        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-5">
-                          <p className="text-slate-500 text-sm mb-2">Body Language</p>
+                        <div className="bg-white/70 border border-gray-200 rounded-xl p-5">
+                          <p className="text-gray-500 text-sm mb-2">Body Language</p>
                           <div className={`text-3xl font-bold ${getScoreColor(selectedAnalysis.bodyLanguage)}`}>
                             {selectedAnalysis.bodyLanguage}/100
                           </div>
                         </div>
-                        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-5">
-                          <p className="text-slate-500 text-sm mb-2">Pacing</p>
+                        <div className="bg-white/70 border border-gray-200 rounded-xl p-5">
+                          <p className="text-gray-500 text-sm mb-2">Pacing</p>
                           <div className={`text-3xl font-bold ${getScoreColor(selectedAnalysis.pace)}`}>
                             {selectedAnalysis.pace}/100
                           </div>
                         </div>
-                        <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-5">
-                          <p className="text-slate-500 text-sm mb-2">Confidence</p>
+                        <div className="bg-white/70 border border-gray-200 rounded-xl p-5">
+                          <p className="text-gray-500 text-sm mb-2">Confidence</p>
                           <div className={`text-3xl font-bold ${getScoreColor(selectedAnalysis.confidence)}`}>
                             {selectedAnalysis.confidence}/100
                           </div>

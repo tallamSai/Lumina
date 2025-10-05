@@ -7,6 +7,7 @@ import { DynamicAICompanion } from '../lib/dynamicAICompanion';
 import { DataStorageService } from '../lib/dataStorageService';
 import AICharacter from '../components/AICharacter';
 import FeedbackPanel from '../components/FeedbackPanel';
+import Navbar from '../components/Navbar';
 
 const AIInteraction = () => {
   // State management
@@ -705,251 +706,256 @@ const AIInteraction = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      {/* Left Panel - User Video */}
-      <div className="w-1/3 bg-black relative">
-        {isVideoOn ? (
-          <div className="relative w-full h-full">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-              style={{
-                objectFit: 'cover',
-                objectPosition: 'center',
-                transform: 'scale(1)',
-                transformOrigin: 'center'
-              }}
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 w-full h-full pointer-events-none"
-              style={{ display: 'none' }}
-            />
-            
-            {/* User Info Overlay */}
-            <div className="absolute top-4 left-4 bg-white bg-opacity-90 rounded-lg p-3">
-              <h3 className="font-semibold text-gray-800">You</h3>
-              <p className="text-sm text-gray-600">
-                {currentMode === 'interview' ? 'Interview Practice' : 'Presentation Practice'}
-              </p>
-              {currentMode === 'interview' && (
-                <div className="mt-2 flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-xs text-blue-600">Interview Mode</span>
-                </div>
-              )}
-            </div>
-
-            {/* Conversation State Overlay */}
-            <div className="absolute top-4 right-4 bg-white bg-opacity-95 rounded-lg p-3 max-w-xs">
-              <h4 className="font-semibold text-gray-800 mb-2 text-sm">Status</h4>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    conversationState === 'waiting' ? 'bg-yellow-500' :
-                    conversationState === 'listening' ? 'bg-green-500 animate-pulse' :
-                    conversationState === 'analyzing' ? 'bg-blue-500 animate-pulse' :
-                    conversationState === 'responding' ? 'bg-purple-500 animate-pulse' :
-                    'bg-gray-500'
-                  }`}></div>
-                  <span className="text-xs text-gray-600 capitalize">
-                    {conversationState === 'waiting' ? 'Waiting for you to speak...' :
-                     conversationState === 'listening' ? 'Listening to you...' :
-                     conversationState === 'analyzing' ? 'Analyzing your speech...' :
-                     conversationState === 'responding' ? 'Preparing response...' :
-                     'Inactive'}
-                  </span>
-                </div>
-                
-                {currentUserInput && (
-                  <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                    <span className="text-gray-500">You said: </span>
-                    <span className="text-gray-800">"{currentUserInput}"</span>
+    <div className="min-h-screen bg-white flex">
+      <div className="fixed inset-x-0 top-0 z-40">
+        <Navbar />
+      </div>
+      <div className="pt-24 w-full flex">
+        {/* Left Panel - User Video */}
+        <div className="w-1/3 bg-black relative">
+          {isVideoOn ? (
+            <div className="relative w-full h-full">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+                style={{
+                  objectFit: 'cover',
+                  objectPosition: 'center',
+                  transform: 'scale(1)',
+                  transformOrigin: 'center'
+                }}
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full pointer-events-none"
+                style={{ display: 'none' }}
+              />
+              
+              {/* User Info Overlay */}
+              <div className="absolute top-4 left-4 bg-white bg-opacity-90 rounded-lg p-3">
+                <h3 className="font-semibold text-gray-800">You</h3>
+                <p className="text-sm text-gray-600">
+                  {currentMode === 'interview' ? 'Interview Practice' : 'Presentation Practice'}
+                </p>
+                {currentMode === 'interview' && (
+                  <div className="mt-2 flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span className="text-xs text-blue-600">Interview Mode</span>
                   </div>
                 )}
+              </div>
 
-                {currentMode === 'interview' && currentQuestion && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
-                    <div className="flex items-center space-x-1 mb-1">
-                      <Briefcase className="w-3 h-3 text-blue-600" />
-                      <span className="text-blue-600 font-medium">Interview Question</span>
-                    </div>
-                    <p className="text-gray-800 text-xs">{currentQuestion.question}</p>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}
-                    </div>
+              {/* Conversation State Overlay */}
+              <div className="absolute top-4 right-4 bg-white bg-opacity-95 rounded-lg p-3 max-w-xs">
+                <h4 className="font-semibold text-gray-800 mb-2 text-sm">Status</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      conversationState === 'waiting' ? 'bg-yellow-500' :
+                      conversationState === 'listening' ? 'bg-green-500 animate-pulse' :
+                      conversationState === 'analyzing' ? 'bg-blue-500 animate-pulse' :
+                      conversationState === 'responding' ? 'bg-purple-500 animate-pulse' :
+                      'bg-gray-500'
+                    }`}></div>
+                    <span className="text-xs text-gray-600 capitalize">
+                      {conversationState === 'waiting' ? 'Waiting for you to speak...' :
+                       conversationState === 'listening' ? 'Listening to you...' :
+                       conversationState === 'analyzing' ? 'Analyzing your speech...' :
+                       conversationState === 'responding' ? 'Preparing response...' :
+                       'Inactive'}
+                    </span>
                   </div>
-                )}
-                
-                {currentAnalysis && (
-                  <div className="mt-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Overall Score:</span>
-                      <div className="flex items-center">
-                        <div className="w-12 h-1.5 bg-gray-200 rounded-full mr-2">
-                          <div 
-                            className="h-1.5 bg-gradient-to-r from-green-500 to-blue-500 rounded-full transition-all duration-300"
-                            style={{ width: `${currentAnalysis.overallScore || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium">{currentAnalysis.overallScore || 0}%</span>
+                  
+                  {currentUserInput && (
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                      <span className="text-gray-500">You said: </span>
+                      <span className="text-gray-800">"{currentUserInput}"</span>
+                    </div>
+                  )}
+
+                  {currentMode === 'interview' && currentQuestion && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
+                      <div className="flex items-center space-x-1 mb-1">
+                        <Briefcase className="w-3 h-3 text-blue-600" />
+                        <span className="text-blue-600 font-medium">Interview Question</span>
+                      </div>
+                      <p className="text-gray-800 text-xs">{currentQuestion.question}</p>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Question {currentQuestion.questionNumber} of {currentQuestion.totalQuestions}
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                  
+                  {currentAnalysis && (
+                    <div className="mt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-600">Overall Score:</span>
+                        <div className="flex items-center">
+                          <div className="w-12 h-1.5 bg-gray-200 rounded-full mr-2">
+                            <div 
+                              className="h-1.5 bg-gradient-to-r from-green-500 to-blue-500 rounded-full transition-all duration-300"
+                              style={{ width: `${currentAnalysis.overallScore || 0}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium">{currentAnalysis.overallScore || 0}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-white">
-              <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-xl">Camera is off</p>
-              <p className="text-sm opacity-75">Click "Start Session" to begin</p>
-            </div>
-          </div>
-        )}
-
-        {/* Conversation State Indicator */}
-        {isSessionActive && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
-            <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm">
-              {conversationState === 'waiting' && 'Ready to listen...'}
-              {conversationState === 'listening' && 'Listening...'}
-              {conversationState === 'analyzing' && 'Analyzing...'}
-              {conversationState === 'responding' && 'AI is responding...'}
-              {isGeneratingResponse && 'Generating response...'}
-            </div>
-            <div className="mt-2 bg-blue-900 bg-opacity-50 text-white px-3 py-1 rounded-lg text-xs">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                <span>Speech: {speechRecognitionService}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Manual Response Trigger */}
-        {isSessionActive && currentUserInput && (
-          <div className="absolute top-4 right-4 flex space-x-2">
-            <button
-              onClick={() => {
-                console.log('Testing speech recognition...');
-                speechAnalyzer.current.testSpeechRecognition();
-                console.log('Current user input:', currentUserInput);
-                console.log('Is generating response:', isGeneratingResponse);
-                console.log('Conversation state:', conversationState);
-              }}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs"
-            >
-              Test Speech
-            </button>
-            <button
-              onClick={() => {
-                if (currentUserInput && !isGeneratingResponse) {
-                  console.log('Manual response trigger for:', currentUserInput);
-                  generateAIResponse(currentUserInput, currentAnalysis);
-                }
-              }}
-              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-            >
-              Get Response
-            </button>
-          </div>
-        )}
-
-        {/* Control Buttons */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
-          {!isSessionActive ? (
-            <button
-              onClick={startSession}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <Phone className="w-5 h-5" />
-              <span>Start Session</span>
-            </button>
           ) : (
-            <>
-              {/* Mode Toggle */}
-              <div className="flex bg-gray-800 rounded-lg p-1">
-                <button
-                  onClick={switchToPresentationMode}
-                  className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                    currentMode === 'presentation' 
-                      ? 'bg-white text-gray-800' 
-                      : 'text-white hover:bg-gray-700'
-                  }`}
-                >
-                  <Target className="w-4 h-4 inline mr-1" />
-                  Presentation
-                </button>
-                <button
-                  onClick={() => startInterviewPractice()}
-                  className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                    currentMode === 'interview' 
-                      ? 'bg-white text-gray-800' 
-                      : 'text-white hover:bg-gray-700'
-                  }`}
-                >
-                  <Briefcase className="w-4 h-4 inline mr-1" />
-                  Interview
-                </button>
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-white">
+                <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-xl">Camera is off</p>
+                <p className="text-sm opacity-75">Click "Start Session" to begin</p>
               </div>
-
-              <button
-                onClick={() => setIsVideoOn(!isVideoOn)}
-                className={`${isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
-              >
-                {isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-              </button>
-              
-              <button
-                onClick={() => setIsAudioOn(!isAudioOn)}
-                className={`${isAudioOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
-              >
-                {isAudioOn ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-              
-              <button
-                onClick={endSession}
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors"
-              >
-                <PhoneOff className="w-4 h-4" />
-              </button>
-            </>
+            </div>
           )}
+
+          {/* Conversation State Indicator */}
+          {isSessionActive && (
+            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
+              <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+                {conversationState === 'waiting' && 'Ready to listen...'}
+                {conversationState === 'listening' && 'Listening...'}
+                {conversationState === 'analyzing' && 'Analyzing...'}
+                {conversationState === 'responding' && 'AI is responding...'}
+                {isGeneratingResponse && 'Generating response...'}
+              </div>
+              <div className="mt-2 bg-blue-900 bg-opacity-50 text-white px-3 py-1 rounded-lg text-xs">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  <span>Speech: {speechRecognitionService}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manual Response Trigger */}
+          {isSessionActive && currentUserInput && (
+            <div className="absolute top-4 right-4 flex space-x-2">
+              <button
+                onClick={() => {
+                  console.log('Testing speech recognition...');
+                  speechAnalyzer.current.testSpeechRecognition();
+                  console.log('Current user input:', currentUserInput);
+                  console.log('Is generating response:', isGeneratingResponse);
+                  console.log('Conversation state:', conversationState);
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs"
+              >
+                Test Speech
+              </button>
+              <button
+                onClick={() => {
+                  if (currentUserInput && !isGeneratingResponse) {
+                    console.log('Manual response trigger for:', currentUserInput);
+                    generateAIResponse(currentUserInput, currentAnalysis);
+                  }
+                }}
+                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+              >
+                Get Response
+              </button>
+            </div>
+          )}
+
+          {/* Control Buttons */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+            {!isSessionActive ? (
+              <button
+                onClick={startSession}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <Phone className="w-5 h-5" />
+                <span>Start Session</span>
+              </button>
+            ) : (
+              <>
+                {/* Mode Toggle */}
+                <div className="flex bg-gray-800 rounded-lg p-1">
+                  <button
+                    onClick={switchToPresentationMode}
+                    className={`px-3 py-2 rounded-md text-sm transition-colors ${
+                      currentMode === 'presentation' 
+                        ? 'bg-white text-gray-800' 
+                        : 'text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    <Target className="w-4 h-4 inline mr-1" />
+                    Presentation
+                  </button>
+                  <button
+                    onClick={() => startInterviewPractice()}
+                    className={`px-3 py-2 rounded-md text-sm transition-colors ${
+                      currentMode === 'interview' 
+                        ? 'bg-white text-gray-800' 
+                        : 'text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    <Briefcase className="w-4 h-4 inline mr-1" />
+                    Interview
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setIsVideoOn(!isVideoOn)}
+                  className={`${isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
+                >
+                  {isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                </button>
+                
+                <button
+                  onClick={() => setIsAudioOn(!isAudioOn)}
+                  className={`${isAudioOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
+                >
+                  {isAudioOn ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+                
+                <button
+                  onClick={endSession}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Middle Panel - AI Companion */}
-      <div className="w-1/3 bg-gradient-to-br from-blue-50 to-purple-50">
-        <AICharacter
-          isTalking={aiCompanionState.isTalking}
-          isListening={aiCompanionState.isListening}
-          expression={aiCompanionState.currentExpression}
-          currentMessage={currentAIResponse || aiCompanionState.currentMessage}
-          isMuted={isMuted}
-          onToggleMute={toggleMute}
-          analysis={currentAnalysis}
-          currentMode={currentMode}
-          currentQuestion={currentQuestion}
-          interviewProgress={interviewProgress}
-        />
-      </div>
+        {/* Middle Panel - AI Companion */}
+        <div className="w-1/3 bg-gradient-to-br from-blue-50 to-purple-50">
+          <AICharacter
+            isTalking={aiCompanionState.isTalking}
+            isListening={aiCompanionState.isListening}
+            expression={aiCompanionState.currentExpression}
+            currentMessage={currentAIResponse || aiCompanionState.currentMessage}
+            isMuted={isMuted}
+            onToggleMute={toggleMute}
+            analysis={currentAnalysis}
+            currentMode={currentMode}
+            currentQuestion={currentQuestion}
+            interviewProgress={interviewProgress}
+          />
+        </div>
 
-      {/* Right Panel - Feedback History */}
-      <div className="w-1/3 bg-white">
-        <FeedbackPanel
-          feedbackHistory={feedbackHistory}
-          isRecording={isRecording}
-          onStartRecording={() => setIsRecording(true)}
-          onStopRecording={() => setIsRecording(false)}
-          onSaveFeedback={handleSaveFeedback}
-          onClearHistory={handleClearHistory}
-        />
+        {/* Right Panel - Feedback History */}
+        <div className="w-1/3 bg-white">
+          <FeedbackPanel
+            feedbackHistory={feedbackHistory}
+            isRecording={isRecording}
+            onStartRecording={() => setIsRecording(true)}
+            onStopRecording={() => setIsRecording(false)}
+            onSaveFeedback={handleSaveFeedback}
+            onClearHistory={handleClearHistory}
+          />
+        </div>
       </div>
     </div>
   );

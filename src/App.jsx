@@ -5,6 +5,7 @@ import Analyze from './pages/Analyze';
 import Dashboard from './pages/Dashboard';
 import SignIn from './pages/SignIn';
 import AIInteraction from './pages/AIInteraction';
+import LiquidEther from './pages/LiquidEther';
 
 function ScrollToTop() {
   const location = useLocation();
@@ -24,6 +25,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/ai-interaction" element={<AIInteraction />} />
+        <Route path="/liquid-ether" element={<LiquidEther />} />
       </Routes>
     </Router>
   );
