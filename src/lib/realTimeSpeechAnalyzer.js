@@ -16,9 +16,14 @@ export class RealTimeSpeechAnalyzer {
     this.currentSpeech = '';
     this.accumulatedSpeech = ''; // For longer sentences
     this.silenceTimeout = null;
-    this.silenceThreshold = 3000; // Increased for longer sentences (3 seconds)
-    this.minSpeechLength = 800; // Reduced for more responsive detection
-    this.volumeThreshold = 25; // Balanced threshold for better sensitivity
+    this.silenceThreshold = 1800; // faster turn completion
+    this.minSpeechLength = 500; // respond sooner
+    this.volumeThreshold =8; // more sensitive
+    this.noiseFloor = 0; // adaptive baseline
+    this.noiseFloorReady = false; // set after calibration
+    this.calibrationSamples = [];
+    this.maxCalibrationSamples = 60; // ~1s at rAF ~60Hz
+    this.calibrationTimeoutId = null;
     this.speechHistory = []; // Track recent speech for better accuracy
     this.maxHistoryLength = 5;
     this.recognitionRestartDelay = 100; // Slower restart for stability
@@ -27,7 +32,12 @@ export class RealTimeSpeechAnalyzer {
     this.lastSpeechTime = 0; // Track last speech activity
     this.sentenceEndings = ['.', '!', '?', ':', ';']; // Natural sentence endings
     this.adaptiveTimeout = true; // Enable adaptive timeout based on speech length
-    this.minWordsForLongSentence = 8; // Minimum words to consider a long sentence
+    this.minWordsForLongSentence = 6; // consider fewer words a sentence
+    // VAD debouncing
+    this.loudFramesToStart = 6;
+    this.quietFramesToStop = 10;
+    this.loudFrameCounter = 0;
+    this.quietFrameCounter = 0;
     
     // Enhanced speech-to-text with Whisper
     this.whisperSTT = new WhisperSpeechToText();
@@ -128,6 +138,8 @@ export class RealTimeSpeechAnalyzer {
         this.microphone.connect(this.analyser);
         console.log('Microphone connected');
       }
+      // Kick off quick noise calibration before analysis loop
+      this.startNoiseCalibration();
       console.log('🎤 SPEECH ANALYZER: 🚀 Starting WHISPER speech recognition...');
       await this.whisperSTT.startListening(stream);
       // Start analyser-driven volume detection UI
@@ -631,9 +643,23 @@ export class RealTimeSpeechAnalyzer {
       
       // Calculate volume level
       const volume = this.calculateVolume();
+      // Continuously refine noise floor when user is not speaking
+      this.updateNoiseFloor(volume);
       
-      // Detect speech start/end based on volume with improved thresholds
-      if (volume > this.volumeThreshold && !this.isAnalyzing) {
+      // Debounced VAD: require consecutive loud/quiet frames
+      const dynamicThreshold = this.getDynamicThreshold();
+      if (volume > dynamicThreshold) {
+        this.loudFrameCounter += 1;
+        this.quietFrameCounter = 0;
+      } else if (volume < (dynamicThreshold - 12)) {
+        this.quietFrameCounter += 1;
+        this.loudFrameCounter = 0;
+      } else {
+        if (this.loudFrameCounter > 0) this.loudFrameCounter -= 1;
+        if (this.quietFrameCounter > 0) this.quietFrameCounter -= 1;
+      }
+
+      if (!this.isAnalyzing && this.loudFrameCounter >= this.loudFramesToStart) {
         this.isAnalyzing = true;
         this.hasDetectedSpeech = true;
         this.speechStartTime = Date.now();
@@ -641,7 +667,9 @@ export class RealTimeSpeechAnalyzer {
         if (this.callbacks.onSpeechStart) {
           this.callbacks.onSpeechStart();
         }
-      } else if (volume < (this.volumeThreshold - 15) && this.isAnalyzing) {
+      }
+
+      if (this.isAnalyzing && this.quietFrameCounter >= this.quietFramesToStop) {
         this.isAnalyzing = false;
         console.log('Speech ended, volume:', volume);
         if (this.callbacks.onSpeechEnd) {
@@ -653,6 +681,56 @@ export class RealTimeSpeechAnalyzer {
     };
     
     analyze();
+  }
+
+  // Quick calibration over ~1s to establish ambient noise floor
+  startNoiseCalibration() {
+    this.noiseFloorReady = false;
+    this.calibrationSamples = [];
+    if (this.calibrationTimeoutId) {
+      clearTimeout(this.calibrationTimeoutId);
+      this.calibrationTimeoutId = null;
+    }
+    const collect = () => {
+      if (!this.isListening || !this.dataArray) return;
+      this.analyser.getByteFrequencyData(this.dataArray);
+      const v = this.calculateVolume();
+      this.calibrationSamples.push(v);
+      if (this.calibrationSamples.length < this.maxCalibrationSamples) {
+        requestAnimationFrame(collect);
+      }
+    };
+    requestAnimationFrame(collect);
+    this.calibrationTimeoutId = setTimeout(() => {
+      if (this.calibrationSamples.length > 0) {
+        const sorted = [...this.calibrationSamples].sort((a,b)=>a-b);
+        // Use 75th percentile as noise floor to be robust to transient spikes
+        const idx = Math.floor(sorted.length * 0.75);
+        this.noiseFloor = sorted[idx];
+        this.noiseFloorReady = true;
+        console.log('Calibrated noise floor:', this.noiseFloor);
+      }
+      this.calibrationTimeoutId = null;
+    }, 1100);
+  }
+
+  // Update noise floor slowly when quiet frames dominate
+  updateNoiseFloor(currentVolume) {
+    if (!this.noiseFloorReady) return;
+    // If we have consecutive quiet frames, treat as ambient
+    if (this.quietFrameCounter > this.loudFrameCounter) {
+      const alpha = 0.02; // slow EMA to avoid chasing speech
+      this.noiseFloor = (1 - alpha) * this.noiseFloor + alpha * currentVolume;
+    }
+  }
+
+  // Compute threshold relative to noise floor
+  getDynamicThreshold() {
+    if (!this.noiseFloorReady) return this.volumeThreshold;
+    // Ensure minimum headroom above noise floor
+    const headroom = 10; // dB-ish arbitrary units of our scale
+    const adaptive = Math.max(this.noiseFloor + headroom, this.volumeThreshold);
+    return adaptive;
   }
 
   // Calculate volume level

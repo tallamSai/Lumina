@@ -125,8 +125,8 @@ const FeedbackPanel = ({
         </div>
       </div>
 
-      {/* Feedback List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-96" style={{ maxHeight: '400px' }}>
+      {/* Feedback List - becomes scrollable after 2 items to prevent layout shifts */}
+      <div className={`flex-1 p-4 space-y-3 ${feedbackHistory.length > 2 ? 'overflow-y-auto' : 'overflow-y-visible'}`} style={{ maxHeight: feedbackHistory.length > 2 ? '400px' : 'unset' }}>
         {feedbackHistory.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />

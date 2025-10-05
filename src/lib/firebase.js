@@ -4,16 +4,17 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+
 const firebaseConfig = {
-  apiKey: "AIzaSyAYcAG1QVeYgtEiRE5dQS7FiVo62fN4iEk",
-  authDomain: "lumina-5aac9.firebaseapp.com",
-  databaseURL: "https://lumina-5aac9-default-rtdb.firebaseio.com",
-  projectId: "lumina-5aac9",
-  storageBucket: "lumina-5aac9.appspot.com",
-  messagingSenderId: "100605478051",
-  appId: "1:100605478051:web:8e4f1d88aaf40029f16b16",
-  measurementId: "G-VWPWWM6149"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
 
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 

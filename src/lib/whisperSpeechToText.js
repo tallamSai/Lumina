@@ -13,8 +13,8 @@ export class WhisperSpeechToText {
     this.whisperEndpoint = '/api/openai/audio/transcriptions';
     this.maxAudioDuration = 30; // seconds
     this.silenceTimeout = null;
-    this.silenceThreshold = 2000; // 2 seconds
-    this.minChunkBytes = 2000; // ignore tiny chunks
+    this.silenceThreshold = 1500; // faster finalization on pause
+    this.minChunkBytes = 1000; // smaller chunks for quicker feedback
     this.selectedMimeType = null;
     this.fallbackRecognition = null;
     this.fallbackActive = false;
@@ -25,6 +25,19 @@ export class WhisperSpeechToText {
       onError: null,
       onListeningStart: null,
       onListeningEnd: null
+    };
+    // Preprocessing nodes
+    this.preprocess = {
+      inputNode: null,
+      highpass: null,
+      compressor: null,
+      destination: null,
+      processedStream: null
+    };
+    // Retry config
+    this.retry = {
+      maxAttempts: 4,
+      baseDelayMs: 400
     };
   }
 
@@ -159,10 +172,12 @@ export class WhisperSpeechToText {
 
       console.log('🎤 WHISPER STT: Microphone stream ready, setting up audio recording...');
 
-      // Set up MediaRecorder for audio capture
+      // Build preprocessing chain and record the processed stream
+      const processedStream = this.buildPreprocessChain(stream);
+      // Set up MediaRecorder for audio capture (processed)
       const mimeType = this.getSupportedMimeType();
       this.selectedMimeType = mimeType || '';
-      this.mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      this.mediaRecorder = mimeType ? new MediaRecorder(processedStream, { mimeType }) : new MediaRecorder(processedStream);
       console.log('🎤 WHISPER STT: Using mimeType for recording:', this.selectedMimeType || '(browser default)');
 
       this.mediaRecorder.ondataavailable = async (event) => {
@@ -199,8 +214,8 @@ export class WhisperSpeechToText {
       };
 
       // Start recording
-      this.mediaRecorder.start(1000); // Record in 1-second chunks
-      console.log('🎤 WHISPER STT: MediaRecorder started, recording in 1-second chunks');
+      this.mediaRecorder.start(500); // Record in 0.5-second chunks for lower latency
+      console.log('🎤 WHISPER STT: MediaRecorder started, recording in 0.5-second chunks');
       
       // Set up silence detection
       this.setupSilenceDetection(stream);
@@ -223,7 +238,7 @@ export class WhisperSpeechToText {
 
   // Set up silence detection
   setupSilenceDetection(stream) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioContext = this.audioContext || new (window.AudioContext || window.webkitAudioContext)();
     const analyser = audioContext.createAnalyser();
     const microphone = audioContext.createMediaStreamSource(stream);
     microphone.connect(analyser);
@@ -237,10 +252,18 @@ export class WhisperSpeechToText {
       analyser.getByteFrequencyData(dataArray);
       const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
       
-      if (average < 10) { // Silence detected
+      // On extended silence, emit a final transcript by flushing chunks,
+      // but DO NOT stop the recorder so we keep the conversation turn going.
+      if (average < 10) {
         if (!this.silenceTimeout) {
-          this.silenceTimeout = setTimeout(() => {
-            this.stopListening();
+          this.silenceTimeout = setTimeout(async () => {
+            try {
+              // Create a final transcript from current chunks
+              await this.processAudioChunks();
+            } finally {
+              // Keep listening for next user turn
+              this.silenceTimeout = null;
+            }
           }, this.silenceThreshold);
         }
       } else {
@@ -311,11 +334,10 @@ export class WhisperSpeechToText {
       
       console.log('🎤 WHISPER STT: Making API request to:', this.whisperEndpoint);
       
-      const response = await fetch(this.whisperEndpoint, {
+      const response = await this.fetchWithRetries(() => fetch(this.whisperEndpoint, {
         method: 'POST',
-        // Authorization header is injected by the dev proxy
         body: formData
-      });
+      }));
       
       if (!response.ok) {
         console.error('🎤 WHISPER STT: API request failed:', response.status, response.statusText);
@@ -337,6 +359,54 @@ export class WhisperSpeechToText {
       }
       return null;
     }
+  }
+
+  // Exponential backoff with jitter for resilient Whisper calls
+  async fetchWithRetries(requestFn) {
+    let attempt = 0;
+    while (true) {
+      try {
+        const resp = await requestFn();
+        return resp;
+      } catch (e) {
+        attempt += 1;
+        if (attempt >= this.retry.maxAttempts) throw e;
+        const jitter = Math.random() * 0.3 + 0.85; // 0.85x - 1.15x
+        const delay = Math.floor(this.retry.baseDelayMs * Math.pow(2, attempt - 1) * jitter);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
+  // Build a lightweight preprocessing chain: high-pass filter + compressor
+  buildPreprocessChain(stream) {
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = this.audioContext;
+    const input = ctx.createMediaStreamSource(stream);
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 120; // cut low hums
+    highpass.Q.value = 0.707;
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -24;
+    compressor.knee.value = 30;
+    compressor.ratio.value = 6;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.25;
+    const dest = ctx.createMediaStreamDestination();
+    input.connect(highpass);
+    highpass.connect(compressor);
+    compressor.connect(dest);
+    this.preprocess = {
+      inputNode: input,
+      highpass,
+      compressor,
+      destination: dest,
+      processedStream: dest.stream
+    };
+    return dest.stream;
   }
 
   // Handle fallback recognition results
