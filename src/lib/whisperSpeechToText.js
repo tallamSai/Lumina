@@ -8,13 +8,18 @@ export class WhisperSpeechToText {
     this.audioContext = null;
     this.mediaRecorder = null;
     this.audioChunks = [];
-    this.recognition = null;
-    this.fallbackRecognition = null;
     this.whisperApiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    this.whisperEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
+    // Route through Vite dev proxy to avoid exposing the API key in the browser
+    this.whisperEndpoint = '/api/openai/audio/transcriptions';
     this.maxAudioDuration = 30; // seconds
     this.silenceTimeout = null;
     this.silenceThreshold = 2000; // 2 seconds
+    this.minChunkBytes = 2000; // ignore tiny chunks
+    this.selectedMimeType = null;
+    this.fallbackRecognition = null;
+    this.fallbackActive = false;
+    this.whisperFailureCount = 0;
+    this.whisperFailureThreshold = 3;
     this.callbacks = {
       onTranscript: null,
       onError: null,
@@ -23,22 +28,37 @@ export class WhisperSpeechToText {
     };
   }
 
+  // Select a supported MediaRecorder mimeType
+  getSupportedMimeType() {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/mpeg'
+    ];
+    for (const type of candidates) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return null;
+  }
+
   // Initialize the speech-to-text service
   async initialize() {
     try {
       // Initialize audio context
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Initialize fallback Web Speech API
+      // Prepare Web Speech API fallback if available
       this.initializeFallbackRecognition();
-      
       // Check if Whisper API key is available
       if (this.whisperApiKey) {
         console.log('🎤 WHISPER STT: API key found - Whisper will be used for speech recognition');
         console.log('🎤 WHISPER STT: Endpoint configured:', this.whisperEndpoint);
       } else {
-        console.warn('🎤 WHISPER STT: No API key found - Will fallback to Web Speech API');
-        console.warn('🎤 WHISPER STT: To use Whisper, set VITE_OPENAI_API_KEY in your environment');
+        throw new Error('OpenAI API key not found. Set VITE_OPENAI_API_KEY to use Whisper.');
       }
       
       console.log('🎤 WHISPER STT: Service initialized successfully');
@@ -49,32 +69,65 @@ export class WhisperSpeechToText {
     }
   }
 
-  // Initialize fallback Web Speech API
+  // Initialize fallback Web Speech API if supported
   initializeFallbackRecognition() {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      this.fallbackRecognition = new SpeechRecognition();
-      
+    try {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return;
+      this.fallbackRecognition = new SR();
       this.fallbackRecognition.continuous = true;
       this.fallbackRecognition.interimResults = true;
       this.fallbackRecognition.lang = 'en-US';
-      this.fallbackRecognition.maxAlternatives = 3;
-      
       this.fallbackRecognition.onresult = (event) => {
-        this.handleFallbackResult(event);
-      };
-      
-      this.fallbackRecognition.onerror = (event) => {
-        console.error('Fallback recognition error:', event.error);
-        if (this.callbacks.onError) {
-          this.callbacks.onError(event.error);
+        // Stream interim and final results
+        let interim = '';
+        let finalText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const r = event.results[i];
+          const t = r[0]?.transcript || '';
+          if (r.isFinal) finalText += t;
+          else interim += t;
+        }
+        const textToEmit = finalText || interim;
+        if (textToEmit && this.callbacks.onTranscript) {
+          this.callbacks.onTranscript({
+            transcript: textToEmit,
+            isFinal: !!finalText,
+            timestamp: Date.now()
+          });
         }
       };
+      this.fallbackRecognition.onerror = (e) => {
+        if (this.callbacks.onError) this.callbacks.onError(e.error || 'fallback-error');
+      };
+    } catch (e) {
+      console.warn('Fallback initialization failed:', e);
     }
   }
 
+  startFallbackListening() {
+    if (!this.fallbackRecognition || this.fallbackActive) return;
+    try {
+      this.fallbackActive = true;
+      this.fallbackRecognition.start();
+      if (this.callbacks.onListeningStart) this.callbacks.onListeningStart();
+      console.log('🔄 Fallback Web Speech API started');
+    } catch (e) {
+      console.error('Fallback start error:', e);
+      if (this.callbacks.onError) this.callbacks.onError('fallback-start-failed');
+    }
+  }
+
+  stopFallbackListening() {
+    if (!this.fallbackRecognition || !this.fallbackActive) return;
+    try {
+      this.fallbackRecognition.stop();
+    } catch {}
+    this.fallbackActive = false;
+  }
+
   // Start listening with Whisper API
-  async startListening() {
+  async startListening(stream) {
     if (this.isListening) {
       console.log('🎤 WHISPER STT: Already listening');
       return;
@@ -84,33 +137,64 @@ export class WhisperSpeechToText {
       console.log('🎤 WHISPER STT: Starting Whisper speech recognition...');
       this.isListening = true;
       this.audioChunks = [];
-      
-      // Get microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000 // Optimal for Whisper
-        }
-      });
 
-      console.log('🎤 WHISPER STT: Microphone access granted, setting up audio recording...');
+      if (!stream) {
+        throw new Error('No media stream provided to Whisper startListening');
+      }
+
+      // Ensure there's at least one enabled audio track
+      const audioTracks = stream.getAudioTracks();
+      if (!audioTracks || audioTracks.length === 0) {
+        throw new Error('Provided media stream has no audio tracks');
+      }
+      if (!audioTracks[0].enabled) {
+        console.warn('🎤 WHISPER STT: Audio track is disabled; enabling it');
+        audioTracks[0].enabled = true;
+      }
+
+      // Resume AudioContext (required by some browsers until user gesture)
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+
+      console.log('🎤 WHISPER STT: Microphone stream ready, setting up audio recording...');
 
       // Set up MediaRecorder for audio capture
-      this.mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      const mimeType = this.getSupportedMimeType();
+      this.selectedMimeType = mimeType || '';
+      this.mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      console.log('🎤 WHISPER STT: Using mimeType for recording:', this.selectedMimeType || '(browser default)');
 
-      this.mediaRecorder.ondataavailable = (event) => {
+      this.mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
           this.audioChunks.push(event.data);
           console.log('🎤 WHISPER STT: Audio chunk received, size:', event.data.size, 'bytes');
+          // Push rolling chunks to Whisper for near-real-time transcripts
+          if (event.data.size >= this.minChunkBytes) {
+            try {
+              const transcript = await this.transcribeWithWhisper(event.data);
+              if (transcript && this.callbacks.onTranscript) {
+                this.callbacks.onTranscript({
+                  transcript,
+                  isFinal: false,
+                  timestamp: Date.now()
+                });
+              }
+            } catch (e) {
+              console.error('🎤 WHISPER STT: Chunk transcription error:', e);
+              if (this.callbacks.onError) {
+                this.callbacks.onError('chunk-transcription-failed');
+              }
+            }
+          } else {
+            console.log('🎤 WHISPER STT: Skipping tiny chunk');
+          }
         }
       };
 
       this.mediaRecorder.onstop = () => {
-        console.log('🎤 WHISPER STT: Recording stopped, processing audio chunks...');
+        console.log('🎤 WHISPER STT: Recording stopped, creating final transcript...');
+        // Produce a final transcript from the accumulated chunks
         this.processAudioChunks();
       };
 
@@ -129,35 +213,11 @@ export class WhisperSpeechToText {
     } catch (error) {
       console.error('🎤 WHISPER STT: Error starting Whisper listening:', error);
       this.isListening = false;
-      
-      // Fallback to Web Speech API
-      if (this.fallbackRecognition) {
-        console.log('🎤 WHISPER STT: Falling back to Web Speech API');
-        this.startFallbackListening();
-      } else {
-        if (this.callbacks.onError) {
-          this.callbacks.onError('No speech recognition available');
-        }
+      if (this.callbacks.onError) {
+        this.callbacks.onError(error?.message || 'whisper-start-failed');
       }
-    }
-  }
-
-  // Start fallback Web Speech API listening
-  startFallbackListening() {
-    if (this.fallbackRecognition) {
-      try {
-        this.fallbackRecognition.start();
-        this.isListening = true;
-        if (this.callbacks.onListeningStart) {
-          this.callbacks.onListeningStart();
-        }
-        console.log('Fallback Web Speech API listening started');
-      } catch (error) {
-        console.error('Error starting fallback recognition:', error);
-        if (this.callbacks.onError) {
-          this.callbacks.onError('Speech recognition failed');
-        }
-      }
+      // Auto-enable fallback if available
+      this.startFallbackListening();
     }
   }
 
@@ -206,10 +266,6 @@ export class WhisperSpeechToText {
       this.mediaRecorder.stop();
     }
     
-    if (this.fallbackRecognition) {
-      this.fallbackRecognition.stop();
-    }
-    
     if (this.silenceTimeout) {
       clearTimeout(this.silenceTimeout);
       this.silenceTimeout = null;
@@ -222,33 +278,20 @@ export class WhisperSpeechToText {
     console.log('Stopped listening');
   }
 
-  // Process audio chunks with Whisper API
+  // Process concatenated audio chunks with Whisper API (manual flush)
   async processAudioChunks() {
     if (this.isProcessing) return;
-    
     this.isProcessing = true;
-    
     try {
-      // Create audio blob
       const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-      
-      // Check if we have Whisper API key
-      if (this.whisperApiKey) {
-        const transcript = await this.transcribeWithWhisper(audioBlob);
-        if (transcript) {
-          this.handleTranscript(transcript);
-          return;
-        }
+      const transcript = await this.transcribeWithWhisper(audioBlob);
+      if (transcript) {
+        this.handleTranscript(transcript);
       }
-      
-      // Fallback to Web Speech API if Whisper fails
-      console.log('Whisper API not available or failed, using fallback');
-      this.startFallbackListening();
-      
     } catch (error) {
       console.error('Error processing audio:', error);
       if (this.callbacks.onError) {
-        this.callbacks.onError('Audio processing failed');
+        this.callbacks.onError('audio-processing-failed');
       }
     } finally {
       this.isProcessing = false;
@@ -264,16 +307,13 @@ export class WhisperSpeechToText {
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.webm');
       formData.append('model', 'whisper-1');
-      formData.append('language', 'en');
-      formData.append('response_format', 'json');
+      // Intentionally omitting language and response_format to avoid hardcoding; Whisper will auto-detect
       
       console.log('🎤 WHISPER STT: Making API request to:', this.whisperEndpoint);
       
       const response = await fetch(this.whisperEndpoint, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.whisperApiKey}`
-        },
+        // Authorization header is injected by the dev proxy
         body: formData
       });
       
@@ -290,6 +330,11 @@ export class WhisperSpeechToText {
       
     } catch (error) {
       console.error('🎤 WHISPER STT: API error:', error);
+      this.whisperFailureCount += 1;
+      if (this.whisperFailureCount >= this.whisperFailureThreshold) {
+        console.warn('🎤 WHISPER STT: Multiple failures detected, switching to fallback');
+        this.startFallbackListening();
+      }
       return null;
     }
   }
@@ -350,6 +395,7 @@ export class WhisperSpeechToText {
   // Cleanup
   cleanup() {
     this.stopListening();
+    this.stopFallbackListening();
     if (this.audioContext) {
       this.audioContext.close();
     }

@@ -31,7 +31,7 @@ export class RealTimeSpeechAnalyzer {
     
     // Enhanced speech-to-text with Whisper
     this.whisperSTT = new WhisperSpeechToText();
-    this.useWhisper = true; // Enable Whisper by default
+    this.useWhisper = true; // Whisper is required
     
     this.callbacks = {
       onSpeechStart: null,
@@ -53,148 +53,38 @@ export class RealTimeSpeechAnalyzer {
       const bufferLength = this.analyser.frequencyBinCount;
       this.dataArray = new Uint8Array(bufferLength);
 
-      // Initialize Whisper speech-to-text if available
-      if (this.useWhisper) {
-        try {
-          console.log('🎤 SPEECH ANALYZER: Initializing Whisper speech-to-text...');
-          await this.whisperSTT.initialize();
+      // Initialize Whisper speech-to-text (required)
+      console.log('🎤 SPEECH ANALYZER: Initializing Whisper speech-to-text...');
+      await this.whisperSTT.initialize();
       console.log('🎤 SPEECH ANALYZER: ✅ Whisper speech-to-text initialized successfully');
       console.log('🎤 SPEECH ANALYZER: 🚀 Using WHISPER for high-accuracy speech recognition');
       console.log('🎤 SPEECH ANALYZER: 📊 Service Status: WHISPER ACTIVE - High accuracy speech recognition enabled');
-          
-          // Set up Whisper callbacks
-          this.whisperSTT.onTranscript((data) => {
-            this.handleWhisperTranscript(data);
-          });
-          
-          this.whisperSTT.onError((error) => {
-            console.error('🎤 SPEECH ANALYZER: Whisper error:', error);
-            if (this.callbacks.onError) {
-              this.callbacks.onError(error);
-            }
-          });
-          
-          this.whisperSTT.onListeningStart(() => {
-            console.log('🎤 SPEECH ANALYZER: Whisper listening started');
-            if (this.callbacks.onSpeechStart) {
-              this.callbacks.onSpeechStart();
-            }
-          });
-          
-          this.whisperSTT.onListeningEnd(() => {
-            console.log('🎤 SPEECH ANALYZER: Whisper listening ended');
-            if (this.callbacks.onSpeechEnd) {
-              this.callbacks.onSpeechEnd();
-            }
-          });
-          
-        } catch (whisperError) {
-          console.warn('🎤 SPEECH ANALYZER: ❌ Whisper initialization failed, falling back to Web Speech API:', whisperError);
-          this.useWhisper = false;
+      
+      // Set up Whisper callbacks
+      this.whisperSTT.onTranscript((data) => {
+        this.handleWhisperTranscript(data);
+      });
+      
+      this.whisperSTT.onError((error) => {
+        console.error('🎤 SPEECH ANALYZER: Whisper error:', error);
+        if (this.callbacks.onError) {
+          this.callbacks.onError(error);
         }
-      }
-
-      // Initialize fallback Web Speech API
-      if (!this.useWhisper && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-        console.log('🎤 SPEECH ANALYZER: Initializing Web Speech API fallback...');
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        this.recognition = new SpeechRecognition();
-        
-        this.recognition.continuous = true;
-        this.recognition.interimResults = true;
-        this.recognition.lang = 'en-US';
-        this.recognition.maxAlternatives = 5; // Get more alternatives for better accuracy with longer sentences
-        this.recognition.serviceURI = 'wss://www.google.com/speech-api/full-duplex/v1/up';
-        
-        // Enhanced settings for longer sentences
-        if (this.recognition.grammars) {
-          this.recognition.grammars = new (window.SpeechGrammarList || window.webkitSpeechGrammarList)();
+      });
+      
+      this.whisperSTT.onListeningStart(() => {
+        console.log('🎤 SPEECH ANALYZER: Whisper listening started');
+        if (this.callbacks.onSpeechStart) {
+          this.callbacks.onSpeechStart();
         }
-        
-        console.log('🎤 SPEECH ANALYZER: ✅ Web Speech API initialized as fallback');
-        console.log('🎤 SPEECH ANALYZER: 🔄 Using WEB SPEECH API for speech recognition');
-        console.log('🎤 SPEECH ANALYZER: 📊 Service Status: WEB SPEECH API ACTIVE - Fallback mode enabled');
-        
-        this.recognition.onstart = () => {
-          console.log('Speech recognition started');
-        };
-        
-        this.recognition.onresult = (event) => {
-          this.handleSpeechResult(event);
-        };
-        
-        this.recognition.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
-          
-          // Handle specific errors
-          if (event.error === 'not-allowed') {
-            console.error('Microphone access denied. Please allow microphone permissions.');
-            alert('Microphone access denied. Please allow microphone permissions and refresh the page.');
-          } else if (event.error === 'no-speech') {
-            console.log('No speech detected, continuing...');
-            // Don't treat no-speech as an error, just restart
-            if (this.isListening) {
-              setTimeout(() => {
-                if (this.isListening && this.recognition) {
-                  try {
-                    this.recognition.start();
-                  } catch (e) {
-                    console.log('Restart after no-speech failed:', e.message);
-                  }
-                }
-              }, 1000);
-            }
-            return;
-          } else if (event.error === 'audio-capture') {
-            console.error('No microphone found. Please check your microphone.');
-            alert('No microphone found. Please check your microphone connection.');
-          } else if (event.error === 'network') {
-            console.error('Network error. Please check your internet connection.');
-            alert('Network error. Please check your internet connection.');
-          } else if (event.error === 'aborted') {
-            console.log('Speech recognition aborted, restarting...');
-            // Restart after abort
-            if (this.isListening) {
-              setTimeout(() => {
-                if (this.isListening && this.recognition) {
-                  try {
-                    this.recognition.start();
-                  } catch (e) {
-                    console.log('Restart after abort failed:', e.message);
-                  }
-                }
-              }, 500);
-            }
-            return;
-          }
-          
-          if (this.callbacks.onError) {
-            this.callbacks.onError(event.error);
-          }
-        };
-        
-        this.recognition.onend = () => {
-          console.log('Speech recognition ended');
-          if (this.isListening) {
-            // Restart recognition if still listening with faster restart
-            setTimeout(() => {
-              if (this.isListening && this.recognition) {
-                try {
-                  this.recognition.start();
-                } catch (error) {
-                  console.log('Recognition restart error (normal):', error.message);
-                  // Try again after a short delay
-                  setTimeout(() => {
-                    if (this.isListening && this.recognition) {
-                      this.recognition.start();
-                    }
-                  }, 200);
-                }
-              }
-            }, this.recognitionRestartDelay);
-          }
-        };
-      }
+      });
+      
+      this.whisperSTT.onListeningEnd(() => {
+        console.log('🎤 SPEECH ANALYZER: Whisper listening ended');
+        if (this.callbacks.onSpeechEnd) {
+          this.callbacks.onSpeechEnd();
+        }
+      });
 
       return true;
     } catch (error) {
@@ -223,51 +113,25 @@ export class RealTimeSpeechAnalyzer {
       this.speechStartTime = Date.now();
       this.lastSpeechTime = Date.now();
       
-      // Use Whisper if available, otherwise fallback to Web Speech API
-      if (this.useWhisper && this.whisperSTT) {
-        console.log('🎤 SPEECH ANALYZER: 🚀 Starting WHISPER speech recognition...');
-        await this.whisperSTT.startListening();
-      } else {
-        console.log('🎤 SPEECH ANALYZER: 🔄 Starting WEB SPEECH API recognition...');
-        // Set up microphone input for Web Speech API
-        if (stream && this.audioContext) {
-          this.microphone = this.audioContext.createMediaStreamSource(stream);
-          this.microphone.connect(this.analyser);
-          console.log('Microphone connected');
-        }
-
-        // Start Web Speech API recognition
-        if (this.recognition) {
-          try {
-            this.recognition.start();
-            console.log('Web Speech API recognition started successfully');
-          } catch (startError) {
-            console.error('Error starting recognition:', startError);
-            // Try again after a short delay
-            setTimeout(() => {
-              if (this.isListening && this.recognition) {
-                try {
-                  this.recognition.start();
-                  console.log('Speech recognition restarted');
-                } catch (retryError) {
-                  console.error('Retry failed:', retryError);
-                  this.isListening = false;
-                }
-              }
-            }, 1000);
-          }
-        } else {
-          console.error('Speech recognition not available');
-          this.isListening = false;
-          if (this.callbacks.onError) {
-            this.callbacks.onError('Speech recognition not supported');
-          }
-          return;
-        }
-
-        // Start audio analysis for Web Speech API
-        this.startAudioAnalysis();
+      // Validate stream
+      if (!stream) {
+        throw new Error('No media stream provided to RealTimeSpeechAnalyzer.startListening');
       }
+      const audioTracks = stream.getAudioTracks();
+      if (!audioTracks || audioTracks.length === 0) {
+        throw new Error('Provided media stream has no audio tracks');
+      }
+
+      // Always use Whisper and also connect microphone to analyser for volume/silence
+      if (stream && this.audioContext) {
+        this.microphone = this.audioContext.createMediaStreamSource(stream);
+        this.microphone.connect(this.analyser);
+        console.log('Microphone connected');
+      }
+      console.log('🎤 SPEECH ANALYZER: 🚀 Starting WHISPER speech recognition...');
+      await this.whisperSTT.startListening(stream);
+      // Start analyser-driven volume detection UI
+      this.startAudioAnalysis();
       
     } catch (error) {
       console.error('Error starting speech analysis:', error);
@@ -299,10 +163,6 @@ export class RealTimeSpeechAnalyzer {
       this.whisperSTT.stopListening();
     }
     
-    // Stop Web Speech API if active
-    if (this.recognition) {
-      this.recognition.stop();
-    }
     
     if (this.microphone) {
       this.microphone.disconnect();
@@ -320,6 +180,7 @@ export class RealTimeSpeechAnalyzer {
     console.log('🎤 SPEECH ANALYZER: 🚀 WHISPER transcript received:', data);
     
     const transcript = data.transcript;
+    const isFinal = !!data.isFinal;
     const confidence = data.confidence || 0.95; // High confidence for Whisper
     
     console.log('🎤 SPEECH ANALYZER: 📝 WHISPER transcript text:', transcript);
@@ -329,9 +190,9 @@ export class RealTimeSpeechAnalyzer {
     this.currentSpeech = transcript;
     this.lastSpeechTime = Date.now();
     
-    // Process the transcript
-    if (transcript.trim()) {
-      console.log('🎤 SPEECH ANALYZER: 🔄 Processing WHISPER transcript:', transcript.trim());
+    // Only process final transcripts to avoid repetitive responses
+    if (isFinal && transcript.trim()) {
+      console.log('🎤 SPEECH ANALYZER: 🔄 Processing FINAL WHISPER transcript:', transcript.trim());
       const processedTranscript = this.enhanceTranscript(transcript.trim());
       this.processSpeech(processedTranscript);
     }
@@ -553,7 +414,7 @@ export class RealTimeSpeechAnalyzer {
     // Analyze the speech
     const analysis = await this.analyzeSpeech(transcript);
     
-    // Trigger callbacks
+    // Trigger callbacks (mark as final to gate UI)
     if (this.callbacks.onSpeechAnalysis) {
       this.callbacks.onSpeechAnalysis({
         transcript,
@@ -561,7 +422,8 @@ export class RealTimeSpeechAnalyzer {
         timestamp: Date.now(),
         isLongSentence: transcript.split(' ').length > this.minWordsForLongSentence,
         isWhisper: this.useWhisper && this.whisperSTT,
-        service: this.useWhisper && this.whisperSTT ? 'Whisper' : 'Web Speech API'
+        service: this.useWhisper && this.whisperSTT ? 'Whisper' : 'Web Speech API',
+        isFinal: true
       });
     }
   }
@@ -867,16 +729,13 @@ export class RealTimeSpeechAnalyzer {
     console.log('Setting silence timeout to:', timeout, 'ms');
     
     this.silenceTimeout = setTimeout(() => {
-      // Process accumulated speech if we have any
-      if (this.accumulatedSpeech.trim()) {
-        console.log('Silence timeout reached, processing accumulated speech:', this.accumulatedSpeech.trim());
-        const processedTranscript = this.enhanceTranscript(this.accumulatedSpeech.trim());
+      // Process accumulated speech on silence as a final utterance
+      const toProcess = this.accumulatedSpeech.trim() || this.currentSpeech.trim();
+      if (toProcess) {
+        console.log('Silence timeout reached, processing FINAL utterance:', toProcess);
+        const processedTranscript = this.enhanceTranscript(toProcess);
         this.processSpeech(processedTranscript);
         this.accumulatedSpeech = '';
-      } else if (this.currentSpeech.trim()) {
-        console.log('Silence timeout reached, processing current speech:', this.currentSpeech.trim());
-        const processedTranscript = this.enhanceTranscript(this.currentSpeech.trim());
-        this.processSpeech(processedTranscript);
         this.currentSpeech = '';
       }
     }, timeout);

@@ -105,6 +105,10 @@ const AIInteraction = () => {
       console.log('Speech analysis received:', data);
       console.log('Transcript:', data.transcript);
       console.log('Analysis:', data.analysis);
+      // Only react to final transcripts to enforce 1-to-1 turns
+      if (data.isFinal === false) {
+        return;
+      }
       
       // Update speech recognition service status
       if (data.isWhisper) {
