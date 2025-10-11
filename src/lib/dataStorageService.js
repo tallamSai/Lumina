@@ -3,7 +3,7 @@
 
 export class DataStorageService {
   constructor() {
-    this.dbName = 'LuminaAICompanion';
+    this.dbName = 'LumaAICompanion';
     this.dbVersion = 1;
     this.db = null;
     this.isInitialized = false;

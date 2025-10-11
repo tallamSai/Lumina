@@ -68,7 +68,7 @@ export default function Home() {
         <div className="text-center mb-16 mt-25">
           <div className="flex justify-center">
             <BlurText
-              text="Lumina"
+              text="Luma"
               delay={150}
               animateBy="words"
               direction="top"
@@ -168,7 +168,7 @@ export default function Home() {
           </ElectricBorder>
         </div>
 
-        {/* Scroll Reveal Section - Why Choose Lumina */}
+        {/* Scroll Reveal Section - Why Choose Luma */}
         <section className="mt-40 mb-32">
           <div className="max-w-5xl mx-auto">
             <ScrollReveal
@@ -231,7 +231,7 @@ export default function Home() {
                   blurStrength={6}
                   textClassName="text-gray-700 leading-relaxed"
                 >
-                  Every great speaker started somewhere. Lumina helps you identify your unique strengths and areas for growth through advanced AI analysis.
+                  Every great speaker started somewhere. Luma helps you identify your unique strengths and areas for growth through advanced AI analysis.
                 </ScrollReveal>
 
                 <div className="space-y-4 mt-8">
@@ -282,7 +282,7 @@ export default function Home() {
                 blurStrength={6}
                 textClassName="text-gray-800 mb-8"
               >
-                Ready to transform your presentation skills? Start your journey with Lumina today.
+                Ready to transform your presentation skills? Start your journey with Luma today.
               </ScrollReveal>
 
               <div className="flex justify-center gap-4 mt-12 pointer-events-auto">
@@ -330,7 +330,7 @@ export default function Home() {
 
 
       <footer className="relative mt-32 py-10 border-t border-gray-200 text-center text-gray-600 pointer-events-none">
-        <p className="text-lg font-light tracking-wide">&copy; 2025 Lumina AI. Elevate your presentation skills.</p>
+        <p className="text-lg font-light tracking-wide">&copy; 2025 Luma AI. Elevate your presentation skills.</p>
       </footer>
     </div>
   );
