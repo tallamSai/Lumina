@@ -12,10 +12,20 @@ const FeedbackPanel = ({
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const feedbackEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
-  // Auto-scroll to bottom when new feedback is added
+  // Auto-scroll to bottom when new feedback is added (only within the feedback panel, not the whole page)
+  
   useEffect(() => {
-    feedbackEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Find the scrollable container
+    const container = scrollContainerRef.current || feedbackEndRef.current?.parentElement;
+    if (container && container.scrollHeight > container.clientHeight) {
+      // Only scroll if content overflows
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [feedbackHistory]);
 
   // Format timestamp
@@ -125,8 +135,8 @@ const FeedbackPanel = ({
         </div>
       </div>
 
-      {/* Feedback List - becomes scrollable after 2 items to prevent layout shifts */}
-      <div className={`flex-1 p-4 space-y-3 ${feedbackHistory.length > 2 ? 'overflow-y-auto' : 'overflow-y-visible'}`} style={{ maxHeight: feedbackHistory.length > 2 ? '400px' : 'unset' }}>
+      {/* Feedback List - always scrollable to prevent layout shifts */}
+      <div ref={scrollContainerRef} className="flex-1 p-4 space-y-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: 0 }}>
         {feedbackHistory.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />

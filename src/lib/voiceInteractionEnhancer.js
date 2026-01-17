@@ -1,6 +1,8 @@
 // Voice Interaction Enhancer
 // Improves voice interaction quality and natural conversation flow
 
+import { ElevenLabsTTS } from './elevenLabsTTS';
+
 export class VoiceInteractionEnhancer {
   constructor() {
     this.voiceSettings = {
@@ -20,6 +22,11 @@ export class VoiceInteractionEnhancer {
     this.speechSynthesis = window.speechSynthesis;
     this.availableVoices = [];
     this.selectedVoice = null;
+    
+    // Initialize ElevenLabs TTS
+    this.elevenLabs = new ElevenLabsTTS();
+    // Check availability (will be true if API key is set, voice will initialize on first use)
+    this.useElevenLabs = this.elevenLabs.isEnabled;
     
     this.initializeVoices();
   }
@@ -75,6 +82,67 @@ export class VoiceInteractionEnhancer {
       return;
     }
 
+    // Use ElevenLabs if enabled, otherwise fallback to browser TTS
+    if (this.useElevenLabs) {
+      return this.speakWithElevenLabs(text, options);
+    } else {
+      return this.speakWithBrowserTTS(text, options);
+    }
+  }
+
+  // Speak using ElevenLabs TTS
+  async speakWithElevenLabs(text, options = {}) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        this.isSpeaking = true;
+        
+        // Cancel any ongoing speech
+        this.speechSynthesis.cancel();
+        
+        console.log('Speaking with ElevenLabs:', text);
+        
+        // Adjust ElevenLabs settings based on context
+        const elevenLabsOptions = {
+          stability: options.stability !== undefined ? options.stability : 0.5,
+          similarityBoost: options.similarityBoost !== undefined ? options.similarityBoost : 0.75,
+          style: options.style !== undefined ? options.style : 0.0,
+          useSpeakerBoost: true
+        };
+        
+        // Adjust based on emotion/context
+        if (options.emotion === 'happy' || options.isGreeting) {
+          elevenLabsOptions.stability = 0.4;
+          elevenLabsOptions.similarityBoost = 0.8;
+        } else if (options.emotion === 'serious' || options.isInstruction) {
+          elevenLabsOptions.stability = 0.6;
+          elevenLabsOptions.similarityBoost = 0.7;
+        }
+        
+        await this.elevenLabs.speak(text, elevenLabsOptions);
+        
+        this.isSpeaking = false;
+        this.processVoiceQueue();
+        resolve();
+      } catch (error) {
+        console.error('ElevenLabs TTS error, falling back to browser TTS:', error);
+        this.isSpeaking = false;
+        
+        // Check if it's a usage limit error
+        if (error.message && error.message.includes('limit reached')) {
+          console.warn('⚠️ ElevenLabs usage limit reached. Using browser TTS as fallback.');
+          // Show user-friendly message (you can customize this)
+          const usageStats = this.elevenLabs.getUsageStats();
+          console.log(`Usage: ${usageStats.charactersUsed}/${usageStats.remainingCharacters + usageStats.charactersUsed} characters used`);
+        }
+        
+        // Fallback to browser TTS
+        this.speakWithBrowserTTS(text, options).then(resolve).catch(reject);
+      }
+    });
+  }
+
+  // Speak using browser TTS (fallback)
+  async speakWithBrowserTTS(text, options = {}) {
     return new Promise((resolve, reject) => {
       try {
         this.isSpeaking = true;
@@ -99,7 +167,7 @@ export class VoiceInteractionEnhancer {
         
         // Event handlers
         utterance.onstart = () => {
-          console.log('Speaking:', text);
+          console.log('Speaking with browser TTS:', text);
         };
         
         utterance.onend = () => {
@@ -156,16 +224,16 @@ export class VoiceInteractionEnhancer {
   // Speak with emotional tone
   async speakWithEmotion(text, emotion = 'neutral') {
     const emotionSettings = {
-      happy: { rate: 1.1, pitch: 1.1, volume: 0.9 },
-      excited: { rate: 1.2, pitch: 1.2, volume: 0.95 },
-      encouraging: { rate: 0.95, pitch: 1.05, volume: 0.85 },
-      supportive: { rate: 0.9, pitch: 0.95, volume: 0.8 },
-      serious: { rate: 0.85, pitch: 0.9, volume: 0.85 },
-      neutral: { rate: 0.9, pitch: 1.0, volume: 0.8 }
+      happy: { rate: 1.1, pitch: 1.1, volume: 0.9, stability: 0.4, similarityBoost: 0.8 },
+      excited: { rate: 1.2, pitch: 1.2, volume: 0.95, stability: 0.3, similarityBoost: 0.85 },
+      encouraging: { rate: 0.95, pitch: 1.05, volume: 0.85, stability: 0.45, similarityBoost: 0.75 },
+      supportive: { rate: 0.9, pitch: 0.95, volume: 0.8, stability: 0.5, similarityBoost: 0.75 },
+      serious: { rate: 0.85, pitch: 0.9, volume: 0.85, stability: 0.6, similarityBoost: 0.7 },
+      neutral: { rate: 0.9, pitch: 1.0, volume: 0.8, stability: 0.5, similarityBoost: 0.75 }
     };
     
     const settings = emotionSettings[emotion] || emotionSettings.neutral;
-    return await this.speak(text, settings);
+    return await this.speak(text, { ...settings, emotion });
   }
 
   // Speak with conversation context
@@ -194,7 +262,16 @@ export class VoiceInteractionEnhancer {
       pitch = 0.95;
     }
     
-    return await this.speakWithEmotion(text, emotion);
+    // Pass emotion and context to speak method
+    return await this.speak(text, {
+      emotion,
+      rate,
+      pitch,
+      isGreeting,
+      isQuestion,
+      isFeedback,
+      isInstruction
+    });
   }
 
   // Stop all speech

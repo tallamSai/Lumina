@@ -21,7 +21,16 @@ export class DynamicAICompanion {
     this.enhancedInterviewCoach = new EnhancedInterviewCoach();
     this.voiceEnhancer = new VoiceInteractionEnhancer();
     this.advancedFeatures = new AdvancedFeatures();
-    this.currentMode = 'presentation'; // presentation, interview, general
+    this.currentMode = 'interview'; // interview, general
+    
+    // Interview mode state
+    this.interviewSession = null;
+    this.interviewContext = null; // Stores job role, industry, etc.
+    this.interviewAnswers = []; // Stores all user answers with questions
+    this.currentInterviewQuestion = null;
+    this.interviewQuestionIndex = 0;
+    this.interviewPhase = 'introduction'; // introduction, generic, technical, conclusion, feedback
+    this.isGeneralConversation = false; // Track if user is making general conversation
     this.voiceSettings = {
       rate: 0.9,
       pitch: 1.0,
@@ -146,11 +155,11 @@ export class DynamicAICompanion {
       const modelName = this.workingModelName || 'gemini-2.5-flash-lite';
       const model = this.genAI.getGenerativeModel({ model: modelName });
       
-      const prompt = `You are an AI presentation coach meeting a new student for the first time. Generate a warm, encouraging, and personalized greeting that:
-      1. Introduces yourself as their AI coach
-      2. Shows enthusiasm about helping them improve
+      const prompt = `You are an AI interview coach meeting a new student for the first time. Generate a warm, encouraging, and personalized greeting that:
+      1. Introduces yourself as their AI interview coach
+      2. Shows enthusiasm about helping them improve their interview skills
       3. Sets a positive, supportive tone
-      4. Mentions that you'll be analyzing their presentation skills in real-time
+      4. Mentions that you'll be analyzing their communication skills in real-time
       5. Keeps it conversational and friendly (2-3 sentences max)
       
       Respond with just the greeting text, no additional formatting.`;
@@ -159,7 +168,7 @@ export class DynamicAICompanion {
       const response = await result.response;
       const text = response.text();
       
-      return text || "Hello! I'm your AI presentation coach. I'm excited to help you improve your speaking skills today!";
+      return text || "Hello! I'm your AI interview coach. I'm excited to help you improve your interview skills today!";
     } catch (error) {
       console.error('Error generating greeting:', error);
       throw new Error(`Failed to generate greeting: ${error.message}`);
@@ -227,6 +236,16 @@ export class DynamicAICompanion {
       analysis: analysis,
       userMessage
     });
+    
+    // Store user message in history if provided
+    if (userMessage) {
+      this.conversationHistory.push({
+        timestamp,
+        type: 'user_message',
+        message: userMessage,
+        userMessage: userMessage
+      });
+    }
 
     // Update advanced features with conversation data
     this.advancedFeatures.trackProgress({
@@ -261,6 +280,19 @@ export class DynamicAICompanion {
       }
       this.lastRequestKey = requestKey;
       this.lastRequestTime = Date.now();
+      
+      // If in interview mode and starting, generate first question
+      if (this.currentMode === 'interview' && !this.currentInterviewQuestion && userMessage) {
+        const lowerMessage = userMessage.toLowerCase();
+        if (lowerMessage.includes('start interview') || lowerMessage.includes('begin interview') || lowerMessage.includes('interview')) {
+          const context = this.extractInterviewContext(userMessage);
+          this.interviewContext = context;
+          await this.generateNextInterviewQuestion(context);
+          if (this.currentInterviewQuestion) {
+            return `Thanks for coming in today. ${this.currentInterviewQuestion.question}`;
+          }
+        }
+      }
 
       // Create cache key based on analysis data
       const cacheKey = this.createCacheKey(analysis, userMessage);
@@ -287,24 +319,13 @@ export class DynamicAICompanion {
       const modelName = this.workingModelName || 'gemini-2.5-flash-lite';
       const model = this.genAI.getGenerativeModel({ model: modelName });
       
-      let prompt = `You are an expert AI presentation coach providing real-time feedback. `;
+      // Determine mode and build context-aware prompt
+      const modeContext = await this.buildModeContext(userMessage, analysis);
+      let prompt = modeContext.prompt;
       
-      // Check if user is asking for interview preparation
-      const isInterviewRequest = userMessage && (
-        userMessage.toLowerCase().includes('interview') ||
-        userMessage.toLowerCase().includes('prepare') ||
-        userMessage.toLowerCase().includes('practice') ||
-        userMessage.toLowerCase().includes('question') ||
-        userMessage.toLowerCase().includes('job')
-      );
-      
-      if (isInterviewRequest) {
-        this.currentMode = 'interview';
-        prompt += `The user is asking about interview preparation. `;
-      }
-      
-      if (userMessage) {
-        prompt += `The user just said: "${userMessage}". `;
+      // Update mode if detected
+      if (modeContext.mode) {
+        this.currentMode = modeContext.mode;
       }
       
       // Add conversation context to prevent repetitive responses
@@ -323,7 +344,14 @@ export class DynamicAICompanion {
       // Get conversation phase
       const conversationPhase = this.getConversationPhase();
       
-      prompt += `Based on the following real-time analysis data, provide a helpful, encouraging, and specific response:
+      // For interview mode, use the simpler prompt from buildInterviewContext
+      if (this.currentMode === 'interview') {
+        // The prompt from buildInterviewContext is already complete and interviewer-focused
+        // Just add a final instruction
+        prompt += `\n\nRespond naturally as an interviewer. Keep it brief and conversational.`;
+      } else {
+        // For non-interview modes, add the full analysis and guidelines
+        prompt += `\n\nBased on the following real-time analysis data, provide a helpful, encouraging, and specific response:
 
 ANALYSIS DATA:
 - Overall Score: ${analysis?.overallScore || 0}%
@@ -356,13 +384,13 @@ Guidelines:
 11. NEVER repeat the same feedback twice in a row
 12. Focus on different aspects each time (voice, body language, confidence, etc.)
 13. Use varied vocabulary and sentence structures
-14. If this is a greeting (hi/hello), acknowledge it briefly and move to constructive feedback about their presentation skills
-15. If multiple greetings, be more direct and focus on actual presentation practice
+14. If this is a greeting (hi/hello), acknowledge it briefly and move to constructive feedback about their interview skills
+15. If multiple greetings, be more direct and focus on actual interview practice
 16. NEVER keep repeating greeting advice - move on to other aspects after first greeting
 17. Based on conversation phase, adjust your approach:
    - Early: Focus on basic skills and encouragement
    - Middle: Provide specific technical feedback
-   - Advanced: Challenge with complex presentation scenarios
+   - Advanced: Challenge with complex interview scenarios
 18. NEVER use phrases like "let's focus on building momentum" or "since we're just getting started"
 19. Be direct and actionable - tell them exactly what to do next
 20. Vary your response style - sometimes ask questions, sometimes give direct advice
@@ -373,6 +401,7 @@ Guidelines:
 25. For interview mode, focus on communication skills, confidence, and answering techniques
 
 Respond with just the feedback text, no additional formatting.`;
+      }
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -385,7 +414,73 @@ Respond with just the feedback text, no additional formatting.`;
       const trimmedText = text.trim();
       
       // Post-process response to make it more sensible
-      const processedText = this.postProcessResponse(trimmedText, userMessage, analysis);
+      let processedText = this.postProcessResponse(trimmedText, userMessage, analysis);
+      
+      // In interview mode, ensure we ask questions properly
+      if (this.currentMode === 'interview') {
+        // If starting interview and we have a question ready, use it
+        if (this.currentInterviewQuestion && this.interviewAnswers.length === 0) {
+          // First question - return it directly with a brief greeting
+          return `Thanks for coming in today. ${this.currentInterviewQuestion.question}`;
+        }
+        
+        // Check if we're in feedback phase
+        const currentPhase = this.getInterviewPhase();
+        
+        // If we've asked enough questions (7+), wrap up professionally with feedback
+        if (currentPhase === 'feedback' || (this.interviewQuestionIndex >= 7 && this.interviewAnswers.length >= 6)) {
+          // Ensure feedback is provided if in feedback phase
+          if (currentPhase === 'feedback' && !processedText.toLowerCase().includes('strength') && !processedText.toLowerCase().includes('improve')) {
+            const strengths = this.identifyInterviewStrengths();
+            const improvements = this.identifyInterviewImprovements();
+            
+            // Build comprehensive feedback
+            let feedbackParts = [];
+            feedbackParts.push(`Thank you for your time today.`);
+            
+            if (strengths.length > 0) {
+              feedbackParts.push(`I was impressed with your ${strengths[0]}${strengths.length > 1 ? ` and ${strengths[1]}` : ''}.`);
+            }
+            
+            if (improvements.length > 0) {
+              feedbackParts.push(`One suggestion would be to focus on ${improvements[0]}.`);
+            }
+            
+            feedbackParts.push(`We'll be in touch soon about next steps.`);
+            
+            processedText = feedbackParts.join(' ');
+          } else if (!processedText.toLowerCase().includes('thank') && !processedText.toLowerCase().includes('next step')) {
+            processedText = `Thank you for your time today. We'll be in touch soon about next steps.`;
+          }
+          
+          // Reset for next session after a delay (let user see feedback)
+          setTimeout(() => {
+            this.interviewSession = null;
+            this.interviewQuestionIndex = 0;
+            this.interviewAnswers = [];
+            this.currentInterviewQuestion = null;
+            this.interviewPhase = 'introduction';
+          }, 5000);
+        } else if (this.interviewQuestionIndex < 7) {
+          // Ensure response ends with a question if we're continuing
+          if (!processedText.includes('?') && this.interviewAnswers.length > 0) {
+            // Generate and append next question naturally
+            const nextQuestion = await this.generateNextInterviewQuestion();
+            if (nextQuestion) {
+              // Add natural transition
+              processedText = processedText.trim();
+              if (!processedText.endsWith('.') && !processedText.endsWith('!')) {
+                processedText += '.';
+              }
+              processedText += ` ${nextQuestion.question}`;
+            }
+          }
+        }
+        
+        // Remove any coaching language from interview mode responses
+        processedText = processedText.replace(/great job|well done|keep practicing|you did well|good answer/gi, '');
+        processedText = processedText.replace(/let's|let me give you|here's some feedback|i'd like to|i think you/gi, '');
+      }
       
       // Cache the response
       this.responseCache.set(cacheKey, {
@@ -426,6 +521,433 @@ Respond with just the feedback text, no additional formatting.`;
     }
   }
 
+  // Build context-aware prompt based on mode
+  async buildModeContext(userMessage, analysis) {
+    const lowerMessage = userMessage?.toLowerCase() || '';
+    
+    // Check for interview mode triggers
+    const interviewTriggers = ['start interview', 'begin interview', 'interview practice', 'practice interview', 'interview prep', 'prepare for interview', 'interview'];
+    const isStartingInterview = interviewTriggers.some(trigger => lowerMessage.includes(trigger));
+    
+    // Check if already in interview mode
+    const isInterviewMode = this.currentMode === 'interview' || this.interviewSession !== null;
+    
+    // Detect if user is making general conversation
+    const conversationType = this.detectConversationType(userMessage);
+    
+    // If user is making general conversation and not in interview mode, respond naturally
+    if (conversationType === 'general' && !isInterviewMode && !isStartingInterview) {
+      return {
+        prompt: `The user is making general conversation. Respond naturally, friendly, and human-like. After a brief, warm exchange, gently guide the conversation toward interview practice by asking what position they're interested in or if they'd like to start an interview. Keep it conversational (1-2 sentences max).`,
+        mode: 'interview'
+      };
+    }
+    
+    // Extract interview context from user message
+    if (isStartingInterview || (isInterviewMode && userMessage)) {
+      return await this.buildInterviewContext(userMessage, analysis, isStartingInterview);
+    }
+    
+    // Default to interview mode context
+    return await this.buildInterviewContext(userMessage, analysis, false);
+  }
+
+  // Detect if message is general conversation or interview-related
+  detectConversationType(message) {
+    const lower = message.toLowerCase();
+    
+    // Interview triggers
+    const interviewTriggers = ['interview', 'job', 'position', 'role', 'career', 'apply', 'hiring', 'candidate'];
+    const hasInterviewTrigger = interviewTriggers.some(trigger => lower.includes(trigger));
+    
+    // General conversation indicators
+    const generalIndicators = ['hello', 'hi', 'hey', 'how are you', 'what\'s up', 'thanks', 'thank you', 'nice to meet'];
+    const hasGeneralIndicator = generalIndicators.some(indicator => lower.includes(indicator));
+    
+    // Technical terms (suggests interview context)
+    const technicalTerms = ['developer', 'engineer', 'programming', 'coding', 'project', 'experience', 'skills'];
+    const hasTechnicalTerms = technicalTerms.some(term => lower.includes(term));
+    
+    if (hasInterviewTrigger || hasTechnicalTerms) {
+      return 'interview';
+    } else if (hasGeneralIndicator && !hasInterviewTrigger) {
+      return 'general';
+    }
+    
+    return 'interview'; // Default to interview mode
+  }
+
+  // Determine current interview phase dynamically
+  getInterviewPhase() {
+    const answerCount = this.interviewAnswers.length;
+    const totalQuestions = 7;
+    
+    if (answerCount === 0) {
+      return 'introduction';
+    } else if (answerCount >= 1 && answerCount <= 2) {
+      return 'generic';
+    } else if (answerCount >= 3 && answerCount <= 5) {
+      return 'technical';
+    } else if (answerCount >= 6 && answerCount < totalQuestions) {
+      return 'conclusion';
+    } else {
+      return 'feedback';
+    }
+  }
+
+  // Build interview mode context
+  async buildInterviewContext(userMessage, analysis, isStarting = false) {
+    // Detect conversation type
+    const conversationType = this.detectConversationType(userMessage);
+    
+    // If user is making general conversation and we're not in interview mode, respond naturally
+    if (conversationType === 'general' && !isStarting && this.interviewQuestionIndex === 0) {
+      this.isGeneralConversation = true;
+      return {
+        prompt: `The user is making general conversation. Respond naturally and friendly. After a brief exchange, gently guide the conversation toward the interview by asking what position they're interested in or if they'd like to start an interview practice. Keep it conversational (1-2 sentences max).`,
+        mode: 'interview'
+      };
+    }
+    
+    let prompt = `You are a professional, human-like interviewer conducting a real job interview. `;
+    
+    if (isStarting) {
+      // Extract job role/context from user message
+      const extractedContext = this.extractInterviewContext(userMessage);
+      // Also extract technologies from the initial message
+      const initialTech = this.extractTechnologies(userMessage);
+      if (initialTech.length > 0) {
+        extractedContext.skills = [...new Set([...extractedContext.skills || [], ...initialTech])];
+      }
+      this.interviewContext = extractedContext;
+      this.interviewAnswers = [];
+      this.interviewQuestionIndex = 0;
+      this.interviewPhase = 'introduction';
+      this.isGeneralConversation = false;
+      
+      const roleInfo = extractedContext.role || 'a position';
+      const skillsList = extractedContext.skills?.length > 0 ? extractedContext.skills.join(', ') : 'general development';
+      
+      prompt += `You are starting an interview for: ${roleInfo}\n`;
+      if (extractedContext.industry) {
+        prompt += `Industry: ${extractedContext.industry}\n`;
+      }
+      if (extractedContext.experience) {
+        prompt += `Experience level: ${extractedContext.experience}\n`;
+      }
+      if (skillsList !== 'general development') {
+        prompt += `Technologies mentioned: ${skillsList}\n`;
+      }
+      prompt += `\nPHASE: Introduction\n`;
+      prompt += `Start with a warm, professional greeting (like a real person would). `;
+      prompt += `Then ask a friendly introductory question to get to know them - something like "Tell me a bit about yourself" or "What brings you here today?" `;
+      prompt += `Keep it natural and conversational. Return ONLY your greeting and first question (2-3 sentences max).`;
+      
+      // Generate first question (will be used in response)
+      await this.generateNextInterviewQuestion(extractedContext);
+    } else if (this.interviewSession || this.currentMode === 'interview') {
+      // User is answering a question
+      const lastAnswer = {
+        question: this.currentInterviewQuestion?.question || 'Previous question',
+        answer: userMessage,
+        timestamp: Date.now()
+      };
+      this.interviewAnswers.push(lastAnswer);
+      
+      // Update interview phase dynamically
+      this.interviewPhase = this.getInterviewPhase();
+      
+      // Extract technologies/skills mentioned in the answer
+      const mentionedTech = this.extractTechnologies(userMessage);
+      if (mentionedTech.length > 0) {
+        this.interviewContext.skills = [...new Set([...this.interviewContext.skills || [], ...mentionedTech])];
+      }
+      
+      const previousQAs = this.interviewAnswers.slice(-3).map((qa, idx) => 
+        `Q: ${qa.question}\nA: ${qa.answer.substring(0, 200)}`
+      ).join('\n\n');
+      
+      const roleInfo = this.interviewContext?.role || 'a position';
+      const skillsList = this.interviewContext?.skills?.length > 0 ? this.interviewContext.skills.join(', ') : 'general development';
+      const answerCount = this.interviewAnswers.length;
+      
+      prompt += `You are interviewing for: ${roleInfo}\n`;
+      if (skillsList !== 'general development') {
+        prompt += `Technologies mentioned: ${skillsList}\n`;
+      }
+      prompt += `\nPrevious conversation:\n${previousQAs}\n\n`;
+      prompt += `Candidate just answered: "${userMessage.substring(0, 300)}"\n\n`;
+      prompt += `Current Phase: ${this.interviewPhase.toUpperCase()}\n`;
+      prompt += `Questions asked so far: ${answerCount} of ~7\n\n`;
+      
+      // Phase-based interview flow
+      if (this.interviewPhase === 'introduction') {
+        prompt += `PHASE: Introduction (Questions 1-2)\n`;
+        prompt += `- Give a brief, natural acknowledgment of their answer\n`;
+        prompt += `- Ask a friendly, generic question to get to know them better\n`;
+        prompt += `- Examples: "That's interesting. What got you interested in [role/field]?" or "Tell me about your background in [field]"\n`;
+        prompt += `- Keep it conversational and human-like\n`;
+      } else if (this.interviewPhase === 'generic') {
+        prompt += `PHASE: Generic Questions (Questions 2-3)\n`;
+        prompt += `- Acknowledge their answer naturally\n`;
+        prompt += `- Ask behavioral or general professional questions\n`;
+        prompt += `- Examples: "Can you tell me about a challenging project you worked on?" or "How do you handle tight deadlines?"\n`;
+        prompt += `- Reference what they mentioned in previous answers\n`;
+      } else if (this.interviewPhase === 'technical') {
+        prompt += `PHASE: Technical Deep-Dive (Questions 3-6)\n`;
+        prompt += `- This is the core technical assessment phase\n`;
+        prompt += `- Ask SPECIFIC technical questions about ${roleInfo} and ${skillsList}\n`;
+        prompt += `- Make questions relevant to technologies they mentioned\n`;
+        prompt += `- Examples:\n`;
+        prompt += `  * "How would you handle [specific technical challenge] in [technology]?"\n`;
+        prompt += `  * "Explain the difference between [concept A] and [concept B] and when you'd use each."\n`;
+        prompt += `  * "Walk me through how you'd implement [specific feature] using [technology]."\n`;
+        prompt += `  * "Describe a time you had to optimize [specific aspect] in a project."\n`;
+        prompt += `- Reference their previous answers to ask follow-up technical questions\n`;
+        prompt += `- Dig deeper into their technical knowledge\n`;
+      } else if (this.interviewPhase === 'conclusion') {
+        prompt += `PHASE: Conclusion (Questions 6-7)\n`;
+        prompt += `- Ask wrap-up questions about their goals, questions for you, or career aspirations\n`;
+        prompt += `- Examples: "Do you have any questions for me?" or "What are you looking for in your next role?"\n`;
+        prompt += `- Keep it professional but friendly\n`;
+      } else if (this.interviewPhase === 'feedback') {
+        prompt += `PHASE: Feedback and Wrap-up\n`;
+        prompt += `- Thank them for their time\n`;
+        prompt += `- Provide constructive feedback on their interview performance\n`;
+        prompt += `- Mention 1-2 strengths you noticed\n`;
+        prompt += `- Suggest 1-2 areas for improvement\n`;
+        prompt += `- Let them know next steps (e.g., "We'll be in touch soon")\n`;
+        prompt += `- Keep it encouraging and professional (3-4 sentences)\n`;
+      }
+      
+      prompt += `\nBe natural, human-like, and conversational. Don't sound robotic. `;
+      prompt += `Keep your response to 1-2 sentences for questions, 3-4 sentences for feedback phase.`;
+    } else {
+      // User mentioned interview but we're not in interview mode yet
+      prompt += `The candidate wants to start an interview. Ask them what position they're applying for. `;
+    }
+    
+    return { prompt, mode: 'interview' };
+  }
+
+
+  // Extract interview context from user message
+  extractInterviewContext(message) {
+    const lower = message.toLowerCase();
+    const context = {
+      role: null,
+      industry: null,
+      experience: 'intermediate',
+      skills: []
+    };
+    
+    // Extract role
+    const rolePatterns = [
+      /(?:for|as|applying for|position|role|job|role of)\s+(?:a|an|the)?\s*([a-z\s]+?)(?:position|role|job|interview|$)/i,
+      /(?:software|web|frontend|backend|full.?stack|data|machine learning|ML|AI|devops|cloud|security|mobile|ios|android|react|node|python|java|javascript|typescript)\s+(?:developer|engineer|programmer|specialist|architect|analyst|scientist|consultant)/i
+    ];
+    
+    for (const pattern of rolePatterns) {
+      const match = message.match(pattern);
+      if (match) {
+        context.role = match[1]?.trim() || match[0]?.trim();
+        break;
+      }
+    }
+    
+    // Extract industry
+    const industries = ['technology', 'tech', 'finance', 'healthcare', 'education', 'retail', 'consulting', 'startup', 'enterprise'];
+    for (const industry of industries) {
+      if (lower.includes(industry)) {
+        context.industry = industry;
+        break;
+      }
+    }
+    
+    // Extract experience level
+    if (lower.includes('senior') || lower.includes('lead') || lower.includes('principal')) {
+      context.experience = 'senior';
+    } else if (lower.includes('junior') || lower.includes('entry') || lower.includes('graduate')) {
+      context.experience = 'junior';
+    }
+    
+    // Extract skills
+    const commonSkills = ['javascript', 'python', 'react', 'node', 'java', 'sql', 'aws', 'docker', 'kubernetes', 'typescript', 'angular', 'vue'];
+    for (const skill of commonSkills) {
+      if (lower.includes(skill)) {
+        context.skills.push(skill);
+      }
+    }
+    
+    return context;
+  }
+
+  // Extract technologies and skills from user message
+  extractTechnologies(message) {
+    const lower = message.toLowerCase();
+    const technologies = [];
+    
+    // Comprehensive list of technologies
+    const techList = [
+      // Frontend
+      'react', 'vue', 'angular', 'svelte', 'next.js', 'nextjs', 'nuxt', 'gatsby',
+      'javascript', 'typescript', 'jsx', 'tsx', 'html', 'css', 'sass', 'scss',
+      'redux', 'mobx', 'zustand', 'context api', 'webpack', 'vite', 'parcel',
+      // Backend
+      'node.js', 'nodejs', 'express', 'nestjs', 'fastify', 'koa',
+      'python', 'django', 'flask', 'fastapi', 'tornado',
+      'java', 'spring', 'spring boot', 'hibernate',
+      'c#', 'asp.net', '.net', 'dotnet',
+      'php', 'laravel', 'symfony', 'codeigniter',
+      'ruby', 'rails', 'sinatra',
+      'go', 'golang', 'rust',
+      // Databases
+      'mysql', 'postgresql', 'postgres', 'mongodb', 'redis', 'cassandra',
+      'sqlite', 'oracle', 'sql server', 'dynamodb', 'firebase',
+      // Cloud & DevOps
+      'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'k8s',
+      'terraform', 'ansible', 'jenkins', 'ci/cd', 'github actions',
+      // Full Stack
+      'full stack', 'fullstack', 'mern', 'mean', 'mevn', 'lamp', 'lemp',
+      // Other
+      'graphql', 'rest api', 'restful', 'microservices', 'serverless',
+      'websocket', 'socket.io', 'grpc', 'rabbitmq', 'kafka'
+    ];
+    
+    for (const tech of techList) {
+      if (lower.includes(tech)) {
+        technologies.push(tech);
+      }
+    }
+    
+    return [...new Set(technologies)]; // Remove duplicates
+  }
+
+  // Identify interview strengths from answers
+  identifyInterviewStrengths() {
+    if (!this.interviewAnswers || this.interviewAnswers.length === 0) {
+      return [];
+    }
+    
+    const strengths = [];
+    const allAnswers = this.interviewAnswers.map(qa => qa.answer.toLowerCase()).join(' ');
+    
+    // Check for technical depth
+    const technicalTerms = ['implement', 'optimize', 'architecture', 'design', 'algorithm', 'scalability', 'performance'];
+    const hasTechnicalDepth = technicalTerms.some(term => allAnswers.includes(term));
+    if (hasTechnicalDepth) {
+      strengths.push('technical depth');
+    }
+    
+    // Check for experience examples
+    if (allAnswers.includes('project') || allAnswers.includes('experience') || allAnswers.includes('worked on')) {
+      strengths.push('relevant experience');
+    }
+    
+    // Check for problem-solving
+    if (allAnswers.includes('solve') || allAnswers.includes('challenge') || allAnswers.includes('problem')) {
+      strengths.push('problem-solving approach');
+    }
+    
+    return strengths;
+  }
+
+  // Identify interview areas for improvement
+  identifyInterviewImprovements() {
+    if (!this.interviewAnswers || this.interviewAnswers.length === 0) {
+      return [];
+    }
+    
+    const improvements = [];
+    const allAnswers = this.interviewAnswers.map(qa => qa.answer.toLowerCase()).join(' ');
+    
+    // Check answer length (too short might indicate need for more detail)
+    const avgAnswerLength = this.interviewAnswers.reduce((sum, qa) => sum + qa.answer.length, 0) / this.interviewAnswers.length;
+    if (avgAnswerLength < 50) {
+      improvements.push('providing more detailed answers');
+    }
+    
+    // Check for specific examples
+    if (!allAnswers.includes('example') && !allAnswers.includes('instance') && !allAnswers.includes('project')) {
+      improvements.push('using specific examples');
+    }
+    
+    return improvements;
+  }
+
+  // Generate next interview question
+  async generateNextInterviewQuestion(context = null) {
+    if (!this.genAI) return null;
+    
+    try {
+      const model = this.genAI.getGenerativeModel({ model: this.workingModelName || 'gemini-2.5-flash-lite' });
+      
+      const usedQuestions = this.interviewAnswers.map(qa => qa.question);
+      const contextToUse = context || this.interviewContext || {};
+      
+      const recentAnswers = this.interviewAnswers.slice(-3).map((qa, i) => 
+        `Q: ${qa.question}\nA: ${qa.answer.substring(0, 150)}`
+      ).join('\n\n');
+      
+      const skillsList = contextToUse.skills?.length > 0 ? contextToUse.skills.join(', ') : 'general development';
+      const roleInfo = contextToUse.role || 'position';
+      const currentPhase = this.getInterviewPhase();
+      
+      const prompt = `You are a technical interviewer. Generate ONE interview question based on the current phase.
+
+Role: ${roleInfo}
+Technologies mentioned: ${skillsList}
+Industry: ${contextToUse.industry || 'general'}
+Current Phase: ${currentPhase}
+Question ${this.interviewQuestionIndex + 1} of 7
+
+${recentAnswers ? `Recent conversation:\n${recentAnswers}\n\n` : ''}
+
+Phase-specific guidelines:
+${currentPhase === 'introduction' ? `
+- Ask friendly, introductory questions
+- Examples: "Tell me about yourself", "What got you interested in [role]?", "Walk me through your background"
+- Keep it conversational and warm
+` : currentPhase === 'generic' ? `
+- Ask behavioral or general professional questions
+- Examples: "Tell me about a challenging project", "How do you handle deadlines?", "Describe a time you had to learn something new quickly"
+- Reference their previous answers naturally
+` : currentPhase === 'technical' ? `
+- Ask SPECIFIC technical questions about ${roleInfo} and ${skillsList}
+- Focus on: architecture, design patterns, specific technologies, problem-solving, best practices
+- Examples: "How would you handle [technical challenge] in [technology]?", "Explain the difference between [concept A] and [concept B]", "Walk me through implementing [feature]"
+- Make it deep and technical - not generic
+` : currentPhase === 'conclusion' ? `
+- Ask wrap-up questions: "Do you have any questions for me?", "What are you looking for in your next role?", "What interests you about this position?"
+` : `
+- Provide feedback and wrap up
+`}
+
+- Ask a NEW question (not already asked: ${usedQuestions.slice(-3).join(', ')})
+- Reference their previous answers when relevant
+- Be natural and human-like
+
+Return ONLY the question, nothing else.`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const questionText = response.text().trim();
+      
+      this.currentInterviewQuestion = {
+        question: questionText,
+        index: this.interviewQuestionIndex,
+        timestamp: Date.now()
+      };
+      
+      this.interviewQuestionIndex++;
+      
+      return this.currentInterviewQuestion;
+    } catch (error) {
+      console.error('Error generating interview question:', error);
+      return null;
+    }
+  }
+
   // Get conversation phase based on history
   getConversationPhase() {
     const historyLength = this.conversationHistory.length;
@@ -446,8 +968,11 @@ Respond with just the feedback text, no additional formatting.`;
       
       if (greetingCount > 1) {
         // After first greeting, be more direct
-        processed = processed.replace(/great.*ready.*start.*momentum.*voice.*projecting/gi, 
-          'Good! Now let\'s work on your presentation skills. Try speaking about a topic you know well.');
+        // In interview mode, don't add coaching language
+        if (this.currentMode !== 'interview') {
+          processed = processed.replace(/great.*ready.*start.*momentum.*voice.*projecting/gi, 
+            'Good! Now let\'s work on your interview skills. Try answering some interview questions.');
+        }
       }
     }
     
@@ -647,10 +1172,33 @@ Respond with just the feedback text, no additional formatting.`;
     return this.interviewCoach.isSessionActive();
   }
 
-  // Switch between presentation and interview modes
+  // Switch between modes
   setMode(mode) {
     this.currentMode = mode;
     console.log(`Mode switched to: ${mode}`);
+    
+    // Reset interview state when switching away from interview mode
+    if (mode !== 'interview') {
+      this.interviewSession = null;
+      this.interviewQuestionIndex = 0;
+      this.currentInterviewQuestion = null;
+      // Keep interviewAnswers for reference but mark session as ended
+    }
+  }
+  
+  // Get current interview question (for UI display)
+  getCurrentInterviewQuestionForUI() {
+    return this.currentInterviewQuestion;
+  }
+  
+  // Get interview progress
+  getInterviewProgress() {
+    return {
+      questionNumber: this.interviewQuestionIndex,
+      totalQuestions: 7,
+      answersGiven: this.interviewAnswers.length,
+      context: this.interviewContext
+    };
   }
 
   // Get current mode

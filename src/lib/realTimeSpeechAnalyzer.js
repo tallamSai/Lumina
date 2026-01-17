@@ -1,8 +1,6 @@
 // Real-time Speech Analysis Service
 // Analyzes user speech in real-time for presentation skills
-// Now with enhanced Whisper integration for better accuracy
-
-import { WhisperSpeechToText } from './whisperSpeechToText';
+// Speech-to-text is handled by VoiceRecorder component using voice.py backend
 
 export class RealTimeSpeechAnalyzer {
   constructor() {
@@ -39,9 +37,9 @@ export class RealTimeSpeechAnalyzer {
     this.loudFrameCounter = 0;
     this.quietFrameCounter = 0;
     
-    // Enhanced speech-to-text with Whisper
-    this.whisperSTT = new WhisperSpeechToText();
-    this.useWhisper = true; // Whisper is required
+    // Disabled Whisper - using voice.py backend instead
+    // this.whisperSTT = new WhisperSpeechToText();
+    this.useWhisper = false; // Whisper disabled - using voice.py backend
     
     this.callbacks = {
       onSpeechStart: null,
@@ -63,38 +61,9 @@ export class RealTimeSpeechAnalyzer {
       const bufferLength = this.analyser.frequencyBinCount;
       this.dataArray = new Uint8Array(bufferLength);
 
-      // Initialize Whisper speech-to-text (required)
-      console.log('🎤 SPEECH ANALYZER: Initializing Whisper speech-to-text...');
-      await this.whisperSTT.initialize();
-      console.log('🎤 SPEECH ANALYZER: ✅ Whisper speech-to-text initialized successfully');
-      console.log('🎤 SPEECH ANALYZER: 🚀 Using WHISPER for high-accuracy speech recognition');
-      console.log('🎤 SPEECH ANALYZER: 📊 Service Status: WHISPER ACTIVE - High accuracy speech recognition enabled');
-      
-      // Set up Whisper callbacks
-      this.whisperSTT.onTranscript((data) => {
-        this.handleWhisperTranscript(data);
-      });
-      
-      this.whisperSTT.onError((error) => {
-        console.error('🎤 SPEECH ANALYZER: Whisper error:', error);
-        if (this.callbacks.onError) {
-          this.callbacks.onError(error);
-        }
-      });
-      
-      this.whisperSTT.onListeningStart(() => {
-        console.log('🎤 SPEECH ANALYZER: Whisper listening started');
-        if (this.callbacks.onSpeechStart) {
-          this.callbacks.onSpeechStart();
-        }
-      });
-      
-      this.whisperSTT.onListeningEnd(() => {
-        console.log('🎤 SPEECH ANALYZER: Whisper listening ended');
-        if (this.callbacks.onSpeechEnd) {
-          this.callbacks.onSpeechEnd();
-        }
-      });
+      // Whisper is disabled - using voice.py backend via VoiceRecorder component instead
+      console.log('🎤 SPEECH ANALYZER: Whisper disabled - using voice.py backend for transcription');
+      console.log('🎤 SPEECH ANALYZER: 📊 Service Status: Using voice.py backend (Google Speech Recognition)');
 
       return true;
     } catch (error) {
@@ -132,16 +101,17 @@ export class RealTimeSpeechAnalyzer {
         throw new Error('Provided media stream has no audio tracks');
       }
 
-      // Always use Whisper and also connect microphone to analyser for volume/silence
+      // Whisper disabled - microphone is only used for volume/silence analysis
+      // Speech-to-text is handled by VoiceRecorder component using voice.py backend
       if (stream && this.audioContext) {
         this.microphone = this.audioContext.createMediaStreamSource(stream);
         this.microphone.connect(this.analyser);
-        console.log('Microphone connected');
+        console.log('Microphone connected for volume analysis only');
       }
       // Kick off quick noise calibration before analysis loop
       this.startNoiseCalibration();
-      console.log('🎤 SPEECH ANALYZER: 🚀 Starting WHISPER speech recognition...');
-      await this.whisperSTT.startListening(stream);
+      console.log('🎤 SPEECH ANALYZER: Microphone connected for volume analysis');
+      console.log('🎤 SPEECH ANALYZER: Use VoiceRecorder component for speech-to-text (voice.py backend)');
       // Start analyser-driven volume detection UI
       this.startAudioAnalysis();
       
@@ -170,10 +140,10 @@ export class RealTimeSpeechAnalyzer {
     this.accumulatedSpeech = '';
     this.currentSpeech = '';
     
-    // Stop Whisper if active
-    if (this.useWhisper && this.whisperSTT) {
-      this.whisperSTT.stopListening();
-    }
+    // Whisper disabled - no need to stop
+    // if (this.useWhisper && this.whisperSTT) {
+    //   this.whisperSTT.stopListening();
+    // }
     
     
     if (this.microphone) {
@@ -433,8 +403,8 @@ export class RealTimeSpeechAnalyzer {
         analysis,
         timestamp: Date.now(),
         isLongSentence: transcript.split(' ').length > this.minWordsForLongSentence,
-        isWhisper: this.useWhisper && this.whisperSTT,
-        service: this.useWhisper && this.whisperSTT ? 'Whisper' : 'Web Speech API',
+        isWhisper: false,
+        service: 'Voice.py Backend (Google Speech Recognition)',
         isFinal: true
       });
     }

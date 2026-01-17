@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, Mic, MicOff, Video, VideoOff, MessageCircle, Phone, PhoneOff, Settings, Volume2, VolumeX, TrendingUp, Target, Award, Clock, Save, Play, Pause, Loader2, Users, Briefcase, BookOpen, Star, CheckCircle } from 'lucide-react';
+import { Camera, Mic, MicOff, Video, VideoOff, MessageCircle, Phone, PhoneOff, Settings, Volume2, VolumeX, TrendingUp, Award, Clock, Save, Play, Pause, Loader2, Users, Briefcase, BookOpen, Star, CheckCircle } from 'lucide-react';
 import { RealTimeSpeechAnalyzer } from '../lib/realTimeSpeechAnalyzer';
 import { RealTimeVisionAnalyzer } from '../lib/realTimeVisionAnalyzer';
 import { RealTimeVoiceAnalyzer } from '../lib/realTimeVoiceAnalyzer';
@@ -8,6 +8,7 @@ import { DataStorageService } from '../lib/dataStorageService';
 import AICharacter from '../components/AICharacter';
 import FeedbackPanel from '../components/FeedbackPanel';
 import Navbar from '../components/Navbar';
+import VoiceRecorder from '../components/VoiceRecorder';
 
 const AIInteraction = () => {
   // State management
@@ -31,7 +32,7 @@ const AIInteraction = () => {
   const [responseCount, setResponseCount] = useState(0);
   
   // Interview preparation states
-  const [currentMode, setCurrentMode] = useState('presentation'); // presentation, interview
+  const [currentMode, setCurrentMode] = useState('interview'); // interview, general
   const [interviewSession, setInterviewSession] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [interviewProgress, setInterviewProgress] = useState({ completed: 0, total: 0 });
@@ -55,6 +56,7 @@ const AIInteraction = () => {
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
   const chatEndRef = useRef(null);
+  const mediaStreamRef = useRef(null); // Store the media stream for proper management
 
   // AI Services
   const speechAnalyzer = useRef(new RealTimeSpeechAnalyzer());
@@ -70,6 +72,81 @@ const AIInteraction = () => {
       cleanupServices();
     };
   }, []);
+
+  // Handle video state changes - ensure video element is properly updated
+  useEffect(() => {
+    if (isSessionActive && mediaStreamRef.current && videoRef.current) {
+      const videoTracks = mediaStreamRef.current.getVideoTracks();
+      
+      if (isVideoOn && videoTracks.length > 0) {
+        // Ensure video track is enabled and video element has stream
+        videoTracks.forEach(track => {
+          track.enabled = true;
+        });
+        
+        if (videoRef.current.srcObject !== mediaStreamRef.current) {
+          videoRef.current.srcObject = mediaStreamRef.current;
+          videoRef.current.play().catch(err => console.log('Video play error:', err));
+        }
+        
+        // Lock video dimensions to prevent zooming
+        if (videoRef.current) {
+          videoRef.current.style.width = '100%';
+          videoRef.current.style.height = '100%';
+          videoRef.current.style.objectFit = 'cover';
+          videoRef.current.style.objectPosition = 'center';
+          videoRef.current.style.transform = 'scale(1)';
+          videoRef.current.style.transformOrigin = 'center';
+          videoRef.current.style.minWidth = '100%';
+          videoRef.current.style.minHeight = '100%';
+          videoRef.current.style.maxWidth = '100%';
+          videoRef.current.style.maxHeight = '100%';
+        }
+        
+        // Restart vision analysis when video is turned on
+        if (videoRef.current) {
+          visionAnalyzer.current.startAnalysis(videoRef.current, canvasRef.current);
+        }
+      } else if (!isVideoOn && videoTracks.length > 0) {
+        // Disable video tracks
+        videoTracks.forEach(track => {
+          track.enabled = false;
+        });
+        
+        // Stop vision analysis when video is off
+        visionAnalyzer.current.stopAnalysis();
+      }
+    }
+  }, [isVideoOn, isSessionActive]);
+
+  // Handle audio state changes
+  useEffect(() => {
+    if (isSessionActive && mediaStreamRef.current) {
+      const audioTracks = mediaStreamRef.current.getAudioTracks();
+      
+      if (isAudioOn && audioTracks.length > 0) {
+        // Enable audio tracks
+        audioTracks.forEach(track => {
+          track.enabled = true;
+        });
+        
+        // Restart analysis when audio is turned on
+        if (mediaStreamRef.current) {
+          voiceAnalyzer.current.startAnalysis(mediaStreamRef.current);
+          speechAnalyzer.current.startListening(mediaStreamRef.current);
+        }
+      } else if (!isAudioOn && audioTracks.length > 0) {
+        // Disable audio tracks
+        audioTracks.forEach(track => {
+          track.enabled = false;
+        });
+        
+        // Stop analysis when audio is off
+        speechAnalyzer.current.stopListening();
+        voiceAnalyzer.current.stopAnalysis();
+      }
+    }
+  }, [isAudioOn, isSessionActive]);
 
   // Initialize all services
   const initializeServices = async () => {
@@ -111,11 +188,7 @@ const AIInteraction = () => {
       }
       
       // Update speech recognition service status
-      if (data.isWhisper) {
-        setSpeechRecognitionService('🚀 Whisper (High Accuracy)');
-      } else {
-        setSpeechRecognitionService('🔄 Web Speech API (Fallback)');
-      }
+      setSpeechRecognitionService('🎤 Voice.py Backend (Google Speech Recognition)');
       
       // Only process if we have meaningful speech
       if (!data.transcript || data.transcript.length < 3) {
@@ -135,14 +208,27 @@ const AIInteraction = () => {
         return;
       }
       
-      // Check if user is asking for interview preparation
-      const isInterviewRequest = data.transcript.toLowerCase().includes('interview') ||
-        data.transcript.toLowerCase().includes('prepare') ||
-        data.transcript.toLowerCase().includes('practice') ||
-        data.transcript.toLowerCase().includes('question') ||
-        data.transcript.toLowerCase().includes('job');
+      // Check if user is asking to start interview
+      const transcriptLower = data.transcript.toLowerCase();
+      const isStartingInterview = transcriptLower.includes('start interview') ||
+        transcriptLower.includes('begin interview') ||
+        transcriptLower.includes('interview practice') ||
+        (transcriptLower.includes('interview') && (transcriptLower.includes('start') || transcriptLower.includes('begin')));
       
-      if (isInterviewRequest && currentMode === 'presentation') {
+      const isInterviewRequest = transcriptLower.includes('interview') ||
+        transcriptLower.includes('prepare') ||
+        transcriptLower.includes('practice') ||
+        transcriptLower.includes('question') ||
+        transcriptLower.includes('job');
+      
+      // If user explicitly wants to start interview, initialize it
+      if (isStartingInterview) {
+        setCurrentMode('interview');
+        setShowInterviewMode(true);
+        aiCompanion.current.setMode('interview');
+        // The AI will automatically start asking questions based on context
+        console.log('Starting interview mode - AI will ask first question');
+      } else if (isInterviewRequest && currentMode !== 'interview') {
         setCurrentMode('interview');
         setShowInterviewMode(true);
         aiCompanion.current.setMode('interview');
@@ -453,47 +539,178 @@ const AIInteraction = () => {
     }
   };
 
-  const startVideoCapture = async () => {
+  const startVideoCapture = async (videoEnabled = null, audioEnabled = null) => {
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const errorMsg = 'Your browser does not support camera/microphone access. Please use a modern browser like Chrome, Firefox, or Edge.';
+      console.error(errorMsg);
+      alert(errorMsg);
+      return;
+    }
+
+    // Use provided parameters or fall back to state, default to true if starting session
+    const wantVideo = videoEnabled !== null ? videoEnabled : isVideoOn;
+    const wantAudio = audioEnabled !== null ? audioEnabled : isAudioOn;
+
+    // Ensure at least one is requested
+    if (!wantVideo && !wantAudio) {
+      console.error('At least one of video or audio must be requested');
+      alert('Error: At least one of camera or microphone must be enabled.');
+      return;
+    }
+
     try {
-      // Enhanced video constraints to prevent zoom issues
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      // Stop existing stream if any
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+
+      // Try to get both video and audio together first
+      let stream = null;
+      const constraints = {
+        video: wantVideo ? { 
           width: { ideal: 1280, max: 1920 },
           height: { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, max: 60 },
           facingMode: 'user',
           aspectRatio: 16/9
-        },
-        audio: { 
+        } : false,
+        audio: wantAudio ? { 
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 44100
-        }
-      });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        } : false
+      };
+
+      try {
+        // First attempt with ideal constraints
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (firstError) {
+        console.warn('First attempt failed, trying with simpler constraints:', firstError);
         
-        // Ensure video maintains aspect ratio and doesn't zoom
+        // Fallback: Try with simpler constraints
+        const fallbackConstraints = {
+          video: isVideoOn ? { facingMode: 'user' } : false,
+          audio: isAudioOn ? true : false
+        };
+        
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } catch (secondError) {
+          console.warn('Fallback attempt failed, trying video and audio separately:', secondError);
+          
+          // Last resort: Try to get video and audio separately
+          const videoStream = wantVideo ? await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } }).catch(() => null) : null;
+          const audioStream = wantAudio ? await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null) : null;
+          
+          if (videoStream || audioStream) {
+            // Combine streams if we got at least one
+            if (videoStream && audioStream) {
+              // Add audio tracks to video stream
+              audioStream.getAudioTracks().forEach(track => {
+                videoStream.addTrack(track);
+              });
+              stream = videoStream;
+            } else {
+              stream = videoStream || audioStream;
+            }
+          } else {
+            throw secondError; // Throw the last error if everything failed
+          }
+        }
+      }
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream');
+      }
+      
+      // Store stream reference
+      mediaStreamRef.current = stream;
+      
+      if (videoRef.current && wantVideo) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => {
+          console.warn('Video play error (non-critical):', err);
+        });
+        
+        // Lock video dimensions to prevent zooming
+        videoRef.current.style.width = '100%';
+        videoRef.current.style.height = '100%';
         videoRef.current.style.objectFit = 'cover';
         videoRef.current.style.objectPosition = 'center';
+        videoRef.current.style.transform = 'scale(1)';
+        videoRef.current.style.transformOrigin = 'center';
+        videoRef.current.style.minWidth = '100%';
+        videoRef.current.style.minHeight = '100%';
+        videoRef.current.style.maxWidth = '100%';
+        videoRef.current.style.maxHeight = '100%';
       }
       
       // Start real-time analysis
-      startRealTimeAnalysis(stream);
+      startRealTimeAnalysis(stream, wantVideo, wantAudio);
       
     } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Error accessing camera and microphone. Please check permissions.');
+      console.error('Error accessing camera/microphone:', error);
+      
+      // Provide specific error messages based on error type
+      let errorMessage = 'Error accessing camera and microphone. ';
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        errorMessage = 'Camera/microphone access was denied. Please:\n';
+        errorMessage += '1. Click the lock icon in your browser\'s address bar\n';
+        errorMessage += '2. Allow camera and microphone permissions\n';
+        errorMessage += '3. Refresh the page and try again';
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        errorMessage = 'No camera or microphone found. Please:\n';
+        errorMessage += '1. Connect a camera and/or microphone\n';
+        errorMessage += '2. Make sure they are not being used by another application\n';
+        errorMessage += '3. Try again';
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        errorMessage = 'Camera/microphone is already in use. Please:\n';
+        errorMessage += '1. Close other applications using the camera/microphone\n';
+        errorMessage += '2. Refresh the page and try again';
+      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = 'Camera/microphone settings not supported. Trying with basic settings...';
+        console.log('Retrying with basic constraints...');
+        // Retry with minimal constraints
+        try {
+          const basicStream = await navigator.mediaDevices.getUserMedia({
+            video: wantVideo,
+            audio: wantAudio
+          });
+          mediaStreamRef.current = basicStream;
+          if (videoRef.current && wantVideo) {
+            videoRef.current.srcObject = basicStream;
+            videoRef.current.play();
+          }
+          startRealTimeAnalysis(basicStream, wantVideo, wantAudio);
+          return; // Success with basic constraints
+        } catch (retryError) {
+          errorMessage = 'Unable to access camera/microphone with any settings. Please check your device permissions.';
+        }
+      } else {
+        errorMessage += `Error: ${error.message || error.name || 'Unknown error'}`;
+      }
+      
+      alert(errorMessage);
+      
+      // Reset states on error
+      if (isSessionActive) {
+        setIsVideoOn(false);
+        setIsAudioOn(false);
+      }
     }
   };
 
   const stopVideoCapture = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     
@@ -503,28 +720,59 @@ const AIInteraction = () => {
     voiceAnalyzer.current.stopAnalysis();
   };
 
-  const startRealTimeAnalysis = (stream) => {
-    // Start vision analysis
-    if (videoRef.current) {
+  const startRealTimeAnalysis = (stream, videoEnabled = null, audioEnabled = null) => {
+    // Use provided parameters or fall back to state
+    const useVideo = videoEnabled !== null ? videoEnabled : isVideoOn;
+    const useAudio = audioEnabled !== null ? audioEnabled : isAudioOn;
+    
+    // Start vision analysis only if video is on
+    if (useVideo && videoRef.current) {
       visionAnalyzer.current.startAnalysis(videoRef.current, canvasRef.current);
     }
     
-    // Start voice analysis
-    if (stream) {
+    // Start voice analysis only if audio is on
+    if (useAudio && stream) {
       voiceAnalyzer.current.startAnalysis(stream);
     }
     
-    // Start speech analysis
-    if (stream) {
+    // Start speech analysis only if audio is on
+    if (useAudio && stream) {
       speechAnalyzer.current.startListening(stream);
+    }
+  };
+
+  // Check media device permissions
+  const checkMediaPermissions = async () => {
+    if (!navigator.permissions || !navigator.permissions.query) {
+      // Permissions API not supported, will rely on getUserMedia error handling
+      return { video: 'unknown', audio: 'unknown' };
+    }
+
+    try {
+      // Use string literals directly (no TypeScript type assertion in JSX)
+      const videoPermission = await navigator.permissions.query({ name: 'camera' }).catch(() => null);
+      const audioPermission = await navigator.permissions.query({ name: 'microphone' }).catch(() => null);
+      
+      return {
+        video: videoPermission?.state || 'unknown',
+        audio: audioPermission?.state || 'unknown'
+      };
+    } catch (error) {
+      console.warn('Could not check permissions:', error);
+      return { video: 'unknown', audio: 'unknown' };
     }
   };
 
   const startSession = async () => {
     try {
+      // Check permissions first
+      const permissions = await checkMediaPermissions();
+      console.log('Media permissions:', permissions);
+      
       setIsSessionActive(true);
       setIsVideoOn(true);
       setIsAudioOn(true);
+      setIsMuted(false); // Unmuted by default
       setIsRecording(true);
       setSessionStartTime(Date.now());
       
@@ -535,22 +783,36 @@ const AIInteraction = () => {
       } catch (error) {
         console.error('Error initializing AI companion:', error);
         alert(`Error initializing AI companion: ${error.message}. Please check your Gemini API key configuration.`);
+        // Reset session state
+        setIsSessionActive(false);
+        setIsVideoOn(false);
+        setIsAudioOn(false);
+        setIsRecording(false);
         return;
       }
       
-      // Start video capture
-      await startVideoCapture();
+      // Start video capture with explicit true values to ensure they're enabled
+      await startVideoCapture(true, true);
+      
+      // Verify stream was created successfully
+      if (!mediaStreamRef.current) {
+        throw new Error('Failed to start camera/microphone. Please check permissions and try again.');
+      }
       
       console.log('Session started successfully');
     } catch (error) {
       console.error('Error starting session:', error);
-      alert(`Error starting session: ${error.message}`);
       
-      // Reset session state
+      // Reset session state on error
       setIsSessionActive(false);
       setIsVideoOn(false);
       setIsAudioOn(false);
       setIsRecording(false);
+      
+      // Error message already shown in startVideoCapture
+      if (!error.message.includes('Error accessing')) {
+        alert(`Error starting session: ${error.message}`);
+      }
     }
   };
 
@@ -595,6 +857,150 @@ const AIInteraction = () => {
     setIsMuted(!isMuted);
     if (isMuted) {
       speechSynthesis.cancel();
+    }
+  };
+
+  // Toggle video on/off
+  const toggleVideo = async () => {
+    const newVideoState = !isVideoOn;
+    setIsVideoOn(newVideoState);
+    
+    if (isSessionActive) {
+      if (!mediaStreamRef.current) {
+        // No stream exists, need to create one with current states
+        await startVideoCapture(newVideoState, isAudioOn);
+        return;
+      }
+      
+      const videoTracks = mediaStreamRef.current.getVideoTracks();
+      
+      if (newVideoState) {
+        // Turn video on
+        if (videoTracks.length === 0 || videoTracks.every(track => track.readyState === 'ended')) {
+          // Need to get new video track
+          try {
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                frameRate: { ideal: 30, max: 60 },
+                facingMode: 'user',
+                aspectRatio: 16/9
+              }
+            });
+            
+            // Add new video track to existing stream
+            newStream.getVideoTracks().forEach(track => {
+              if (mediaStreamRef.current) {
+                mediaStreamRef.current.addTrack(track);
+              }
+            });
+            
+            // Update video element
+            if (videoRef.current) {
+              videoRef.current.srcObject = mediaStreamRef.current;
+              videoRef.current.play().catch(err => console.log('Video play error:', err));
+            }
+            
+            // Restart vision analysis
+            if (videoRef.current) {
+              visionAnalyzer.current.startAnalysis(videoRef.current, canvasRef.current);
+            }
+          } catch (error) {
+            console.error('Error getting video stream:', error);
+            alert('Error accessing camera. Please check permissions.');
+            setIsVideoOn(false);
+          }
+        } else {
+          // Just enable existing video tracks
+          videoTracks.forEach(track => {
+            track.enabled = true;
+          });
+          
+          // Restart vision analysis
+          if (videoRef.current) {
+            visionAnalyzer.current.startAnalysis(videoRef.current, canvasRef.current);
+          }
+        }
+      } else {
+        // Turn video off - disable video tracks but keep stream
+        videoTracks.forEach(track => {
+          track.enabled = false;
+        });
+        
+        // Stop vision analysis
+        visionAnalyzer.current.stopAnalysis();
+      }
+    }
+  };
+
+  // Toggle audio on/off
+  const toggleAudio = async () => {
+    const newAudioState = !isAudioOn;
+    setIsAudioOn(newAudioState);
+    
+    if (isSessionActive) {
+      if (!mediaStreamRef.current) {
+        // No stream exists, need to create one with current states
+        await startVideoCapture(isVideoOn, newAudioState);
+        return;
+      }
+      
+      const audioTracks = mediaStreamRef.current.getAudioTracks();
+      
+      if (newAudioState) {
+        // Turn audio on
+        if (audioTracks.length === 0 || audioTracks.every(track => track.readyState === 'ended')) {
+          // Need to get new audio track
+          try {
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+              audio: { 
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 44100
+              }
+            });
+            
+            // Add new audio track to existing stream
+            newStream.getAudioTracks().forEach(track => {
+              if (mediaStreamRef.current) {
+                mediaStreamRef.current.addTrack(track);
+              }
+            });
+            
+            // Restart audio analysis
+            if (mediaStreamRef.current) {
+              voiceAnalyzer.current.startAnalysis(mediaStreamRef.current);
+              speechAnalyzer.current.startListening(mediaStreamRef.current);
+            }
+          } catch (error) {
+            console.error('Error getting audio stream:', error);
+            alert('Error accessing microphone. Please check permissions.');
+            setIsAudioOn(false);
+          }
+        } else {
+          // Just enable existing audio tracks
+          audioTracks.forEach(track => {
+            track.enabled = true;
+          });
+          
+          // Restart audio analysis
+          if (mediaStreamRef.current) {
+            voiceAnalyzer.current.startAnalysis(mediaStreamRef.current);
+            speechAnalyzer.current.startListening(mediaStreamRef.current);
+          }
+        }
+      } else {
+        // Turn audio off - disable audio tracks but keep stream
+        audioTracks.forEach(track => {
+          track.enabled = false;
+        });
+        
+        // Stop audio analysis
+        speechAnalyzer.current.stopListening();
+        voiceAnalyzer.current.stopAnalysis();
+      }
     }
   };
 
@@ -659,8 +1065,8 @@ const AIInteraction = () => {
         console.log('Interview session completed with summary:', result);
         setInterviewSession(null);
         setCurrentQuestion(null);
-        setCurrentMode('presentation');
-        aiCompanion.current.setMode('presentation');
+        setCurrentMode('interview');
+        aiCompanion.current.setMode('interview');
         
         // Show completion message with overall score
         if (result.overallScore) {
@@ -698,38 +1104,54 @@ const AIInteraction = () => {
     }
   };
 
-  const switchToPresentationMode = () => {
-    setCurrentMode('presentation');
-    setShowInterviewMode(false);
-    aiCompanion.current.setMode('presentation');
-    if (interviewSession) {
-      aiCompanion.current.completeInterviewSession(interviewSession.id);
-      setInterviewSession(null);
-      setCurrentQuestion(null);
-    }
-  };
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="min-h-screen bg-white flex overflow-hidden">
       <div className="fixed inset-x-0 top-0 z-40">
         <Navbar />
       </div>
-      <div className="pt-24 w-full flex">
+      <div className="pt-24 w-full flex h-screen overflow-hidden">
         {/* Left Panel - User Video */}
-        <div className="w-1/3 bg-black relative">
+        <div className="w-1/3 bg-black relative flex-shrink-0" style={{ 
+          minWidth: '33.333%', 
+          maxWidth: '33.333%', 
+          width: '33.333%',
+          height: 'calc(100vh - 6rem)',
+          minHeight: 'calc(100vh - 6rem)',
+          maxHeight: 'calc(100vh - 6rem)'
+        }}>
           {isVideoOn ? (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full bg-black" style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
               <video
                 ref={videoRef}
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full"
                 style={{
+                  width: '100%',
+                  height: '100%',
                   objectFit: 'cover',
                   objectPosition: 'center',
                   transform: 'scale(1)',
-                  transformOrigin: 'center'
+                  transformOrigin: 'center',
+                  backgroundColor: '#000',
+                  minWidth: '100%',
+                  minHeight: '100%',
+                  maxWidth: '100%',
+                  maxHeight: '100%'
+                }}
+                onLoadedMetadata={() => {
+                  // Ensure video plays when metadata is loaded
+                  if (videoRef.current) {
+                    videoRef.current.play().catch(err => console.log('Video play error:', err));
+                    // Lock video dimensions after metadata loads
+                    if (videoRef.current) {
+                      videoRef.current.style.width = '100%';
+                      videoRef.current.style.height = '100%';
+                      videoRef.current.style.transform = 'scale(1)';
+                    }
+                  }
                 }}
               />
               <canvas
@@ -742,7 +1164,7 @@ const AIInteraction = () => {
               <div className="absolute top-4 left-4 bg-white bg-opacity-90 rounded-lg p-3">
                 <h3 className="font-semibold text-gray-800">You</h3>
                 <p className="text-sm text-gray-600">
-                  {currentMode === 'interview' ? 'Interview Practice' : 'Presentation Practice'}
+                  Interview Practice
                 </p>
                 {currentMode === 'interview' && (
                   <div className="mt-2 flex items-center space-x-2">
@@ -813,28 +1235,30 @@ const AIInteraction = () => {
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full bg-gradient-to-br from-gray-900 to-gray-800">
               <div className="text-center text-white">
-                <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-xl">Camera is off</p>
-                <p className="text-sm opacity-75">Click "Start Session" to begin</p>
+                <VideoOff className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-xl font-semibold mb-2">Camera is off</p>
+                <p className="text-sm opacity-75">
+                  {isSessionActive ? 'Click the video button to turn on camera' : 'Click "Start Session" to begin'}
+                </p>
               </div>
             </div>
           )}
 
           {/* Conversation State Indicator */}
           {isSessionActive && (
-            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
-              <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+              <div className="bg-black bg-opacity-70 backdrop-blur-sm text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg">
                 {conversationState === 'waiting' && 'Ready to listen...'}
-                {conversationState === 'listening' && 'Listening...'}
-                {conversationState === 'analyzing' && 'Analyzing...'}
-                {conversationState === 'responding' && 'AI is responding...'}
-                {isGeneratingResponse && 'Generating response...'}
+                {conversationState === 'listening' && '🎤 Listening...'}
+                {conversationState === 'analyzing' && '⚡ Analyzing...'}
+                {conversationState === 'responding' && '💬 AI is responding...'}
+                {isGeneratingResponse && '🤔 Generating response...'}
               </div>
-              <div className="mt-2 bg-blue-900 bg-opacity-50 text-white px-3 py-1 rounded-lg text-xs">
+              <div className="mt-2 bg-blue-900 bg-opacity-70 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs shadow-lg">
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  <div className={`w-2 h-2 rounded-full ${isAudioOn ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
                   <span>Speech: {speechRecognitionService}</span>
                 </div>
               </div>
@@ -875,56 +1299,47 @@ const AIInteraction = () => {
             {!isSessionActive ? (
               <button
                 onClick={startSession}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-colors"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 <Phone className="w-5 h-5" />
-                <span>Start Session</span>
+                <span className="font-semibold">Start Session</span>
               </button>
             ) : (
               <>
-                {/* Mode Toggle */}
-                <div className="flex bg-gray-800 rounded-lg p-1">
-                  <button
-                    onClick={switchToPresentationMode}
-                    className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                      currentMode === 'presentation' 
-                        ? 'bg-white text-gray-800' 
-                        : 'text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    <Target className="w-4 h-4 inline mr-1" />
-                    Presentation
-                  </button>
-                  <button
-                    onClick={() => startInterviewPractice()}
-                    className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                      currentMode === 'interview' 
-                        ? 'bg-white text-gray-800' 
-                        : 'text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    <Briefcase className="w-4 h-4 inline mr-1" />
-                    Interview
-                  </button>
-                </div>
+                {/* Interview Mode Button */}
+                <button
+                  onClick={() => startInterviewPractice()}
+                  className={`px-3 py-2 rounded-md text-sm transition-all shadow-md ${
+                    currentMode === 'interview' 
+                      ? 'bg-white text-gray-800 font-semibold' 
+                      : 'bg-gray-800 text-white hover:bg-gray-700'
+                  }`}
+                  title="Interview Practice Mode"
+                >
+                  <Briefcase className="w-4 h-4 inline mr-1" />
+                  Interview
+                </button>
 
                 <button
-                  onClick={() => setIsVideoOn(!isVideoOn)}
-                  className={`${isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
+                  onClick={toggleVideo}
+                  className={`${isVideoOn ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors shadow-md`}
+                  title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
                 >
-                  {isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                  {isVideoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
                 </button>
                 
                 <button
-                  onClick={() => setIsAudioOn(!isAudioOn)}
-                  className={`${isAudioOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors`}
+                  onClick={toggleAudio}
+                  className={`${isAudioOn ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors shadow-md`}
+                  title={isAudioOn ? 'Mute microphone' : 'Unmute microphone'}
                 >
-                  {isAudioOn ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  {isAudioOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                 </button>
                 
                 <button
                   onClick={endSession}
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors"
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg flex items-center space-x-1 transition-colors shadow-md"
+                  title="End session"
                 >
                   <PhoneOff className="w-4 h-4" />
                 </button>
@@ -934,7 +1349,14 @@ const AIInteraction = () => {
         </div>
 
         {/* Middle Panel - AI Companion */}
-        <div className="w-1/3 bg-gradient-to-br from-blue-50 to-purple-50">
+        <div className="w-1/3 bg-gradient-to-br from-blue-50 to-purple-50 flex flex-col flex-shrink-0" style={{ 
+          minWidth: '33.333%', 
+          maxWidth: '33.333%', 
+          width: '33.333%',
+          height: 'calc(100vh - 6rem)',
+          minHeight: 'calc(100vh - 6rem)',
+          maxHeight: 'calc(100vh - 6rem)'
+        }}>
           <AICharacter
             isTalking={aiCompanionState.isTalking}
             isListening={aiCompanionState.isListening}
@@ -947,10 +1369,46 @@ const AIInteraction = () => {
             currentQuestion={currentQuestion}
             interviewProgress={interviewProgress}
           />
+          
+          {/* Voice Recorder for AI Tutor */}
+          {isSessionActive && (
+            <div className="p-4 border-t border-gray-200 bg-white">
+              <div className="text-center mb-3">
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">Voice Input</h3>
+                <p className="text-xs text-gray-500">Use voice recording for speech-to-text</p>
+              </div>
+              <VoiceRecorder
+                onTranscription={(text) => {
+                  console.log('Voice transcription received:', text);
+                  setCurrentUserInput(text);
+                  if (text && !isGeneratingResponse && conversationState === 'waiting') {
+                    generateAIResponse(text, currentAnalysis);
+                  }
+                }}
+                onError={(error) => {
+                  console.error('Voice recorder error:', error);
+                  // Show error in UI if needed
+                }}
+                disabled={isGeneratingResponse || conversationState !== 'waiting'}
+                className="flex justify-center"
+                showStatus={true}
+              />
+            </div>
+          )}
         </div>
 
         {/* Right Panel - Feedback History */}
-        <div className="w-1/3 bg-white">
+        <div className="w-1/3 bg-white flex-shrink-0" style={{ 
+          minWidth: '33.333%', 
+          maxWidth: '33.333%', 
+          width: '33.333%',
+          height: 'calc(100vh - 6rem)',
+          minHeight: 'calc(100vh - 6rem)',
+          maxHeight: 'calc(100vh - 6rem)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
           <FeedbackPanel
             feedbackHistory={feedbackHistory}
             isRecording={isRecording}

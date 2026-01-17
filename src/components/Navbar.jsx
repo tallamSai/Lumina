@@ -140,22 +140,6 @@ export default function Navbar() {
                 <span className="relative">AI Companion</span>
               </Link>
 
-              <Link
-                to="/argonix"
-                className={`relative px-5 py-2 rounded-full font-semibold text-sm transition-all duration-300 ${
-                  isActive('/argonix')
-                    ? 'text-white bg-gradient-to-r from-blue-500 to-cyan-500 shadow-lg shadow-blue-500/30'
-                    : 'text-gray-800 hover:text-gray-900 hover:bg-white/40 hover:backdrop-blur-xl'
-                }`}
-                onMouseEnter={playHoverSound}
-                onClick={playClickSound}
-              >
-                {isActive('/argonix') && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full shadow-[0_0_20px_rgba(59,130,246,0.5)] backdrop-blur-xl"></div>
-                )}
-                <span className="relative">Workshop</span>
-              </Link>
-
               {!user ? (
                 <Link
                   to="/signin"
