@@ -619,6 +619,13 @@ Respond with just the feedback text, no additional formatting.`;
       if (initialTech.length > 0) {
         extractedContext.skills = [...new Set([...extractedContext.skills || [], ...initialTech])];
       }
+      // Ensure topic is extracted
+      if (!extractedContext.topic) {
+        const topicFromMsg = this.extractTopicFromMessage(userMessage);
+        if (topicFromMsg) {
+          extractedContext.topic = topicFromMsg;
+        }
+      }
       this.interviewContext = extractedContext;
       this.interviewAnswers = [];
       this.interviewQuestionIndex = 0;
@@ -626,22 +633,24 @@ Respond with just the feedback text, no additional formatting.`;
       this.isGeneralConversation = false;
       
       const roleInfo = extractedContext.role || 'a position';
-      const skillsList = extractedContext.skills?.length > 0 ? extractedContext.skills.join(', ') : 'general development';
+      const topicInfo = extractedContext.topic || extractedContext.industry || null;
+      const skillsList = extractedContext.skills?.length > 0 ? extractedContext.skills.join(', ') : null;
       
-      prompt += `You are starting an interview for: ${roleInfo}\n`;
-      if (extractedContext.industry) {
-        prompt += `Industry: ${extractedContext.industry}\n`;
+      prompt += `You're interviewing someone`;
+      if (roleInfo !== 'a position') {
+        prompt += ` for ${roleInfo}`;
       }
-      if (extractedContext.experience) {
-        prompt += `Experience level: ${extractedContext.experience}\n`;
+      if (topicInfo) {
+        prompt += ` about ${topicInfo}`;
       }
-      if (skillsList !== 'general development') {
-        prompt += `Technologies mentioned: ${skillsList}\n`;
+      prompt += `.\n\n`;
+      prompt += `Start with a brief greeting and ask your first question. `;
+      if (topicInfo) {
+        prompt += `Ask about ${topicInfo} - keep it introductory and friendly. `;
+      } else {
+        prompt += `Ask an introductory question to get to know them. `;
       }
-      prompt += `\nPHASE: Introduction\n`;
-      prompt += `Start with a warm, professional greeting (like a real person would). `;
-      prompt += `Then ask a friendly introductory question to get to know them - something like "Tell me a bit about yourself" or "What brings you here today?" `;
-      prompt += `Keep it natural and conversational. Return ONLY your greeting and first question (2-3 sentences max).`;
+      prompt += `Be natural and conversational (1-2 sentences).`;
       
       // Generate first question (will be used in response)
       await this.generateNextInterviewQuestion(extractedContext);
@@ -663,65 +672,60 @@ Respond with just the feedback text, no additional formatting.`;
         this.interviewContext.skills = [...new Set([...this.interviewContext.skills || [], ...mentionedTech])];
       }
       
+      // Extract topic from answer if not already set
+      const topicFromAnswer = this.extractInterviewContext(userMessage);
+      if (topicFromAnswer.topic && !this.interviewContext.topic) {
+        this.interviewContext.topic = topicFromAnswer.topic;
+      }
+      
       const previousQAs = this.interviewAnswers.slice(-3).map((qa, idx) => 
         `Q: ${qa.question}\nA: ${qa.answer.substring(0, 200)}`
       ).join('\n\n');
       
+      // Extract topic from all conversation
+      const topicFromConversation = this.extractTopicFromConversation();
+      const topicInfo = this.interviewContext?.topic || topicFromConversation || this.interviewContext?.industry || null;
       const roleInfo = this.interviewContext?.role || 'a position';
-      const skillsList = this.interviewContext?.skills?.length > 0 ? this.interviewContext.skills.join(', ') : 'general development';
+      const skillsList = this.interviewContext?.skills?.length > 0 ? this.interviewContext.skills.join(', ') : null;
       const answerCount = this.interviewAnswers.length;
       
-      prompt += `You are interviewing for: ${roleInfo}\n`;
-      if (skillsList !== 'general development') {
-        prompt += `Technologies mentioned: ${skillsList}\n`;
+      prompt += `You're interviewing for ${roleInfo}`;
+      if (topicInfo) {
+        prompt += ` about ${topicInfo}`;
       }
-      prompt += `\nPrevious conversation:\n${previousQAs}\n\n`;
-      prompt += `Candidate just answered: "${userMessage.substring(0, 300)}"\n\n`;
-      prompt += `Current Phase: ${this.interviewPhase.toUpperCase()}\n`;
-      prompt += `Questions asked so far: ${answerCount} of ~7\n\n`;
+      prompt += `.\n\n`;
+      prompt += `Previous Q&A:\n${previousQAs}\n\n`;
+      prompt += `They just answered: "${userMessage.substring(0, 200)}"\n\n`;
+      prompt += `Question ${answerCount + 1} of ~7.\n\n`;
       
-      // Phase-based interview flow
+      // Simple phase-based guidance
       if (this.interviewPhase === 'introduction') {
-        prompt += `PHASE: Introduction (Questions 1-2)\n`;
-        prompt += `- Give a brief, natural acknowledgment of their answer\n`;
-        prompt += `- Ask a friendly, generic question to get to know them better\n`;
-        prompt += `- Examples: "That's interesting. What got you interested in [role/field]?" or "Tell me about your background in [field]"\n`;
-        prompt += `- Keep it conversational and human-like\n`;
+        prompt += `Acknowledge their answer briefly, then ask a friendly introductory question about ${topicInfo || roleInfo}. `;
       } else if (this.interviewPhase === 'generic') {
-        prompt += `PHASE: Generic Questions (Questions 2-3)\n`;
-        prompt += `- Acknowledge their answer naturally\n`;
-        prompt += `- Ask behavioral or general professional questions\n`;
-        prompt += `- Examples: "Can you tell me about a challenging project you worked on?" or "How do you handle tight deadlines?"\n`;
-        prompt += `- Reference what they mentioned in previous answers\n`;
+        prompt += `Ask a behavioral or general question about ${topicInfo || roleInfo}. `;
+        prompt += `Reference what they said. `;
       } else if (this.interviewPhase === 'technical') {
-        prompt += `PHASE: Technical Deep-Dive (Questions 3-6)\n`;
-        prompt += `- This is the core technical assessment phase\n`;
-        prompt += `- Ask SPECIFIC technical questions about ${roleInfo} and ${skillsList}\n`;
-        prompt += `- Make questions relevant to technologies they mentioned\n`;
-        prompt += `- Examples:\n`;
-        prompt += `  * "How would you handle [specific technical challenge] in [technology]?"\n`;
-        prompt += `  * "Explain the difference between [concept A] and [concept B] and when you'd use each."\n`;
-        prompt += `  * "Walk me through how you'd implement [specific feature] using [technology]."\n`;
-        prompt += `  * "Describe a time you had to optimize [specific aspect] in a project."\n`;
-        prompt += `- Reference their previous answers to ask follow-up technical questions\n`;
-        prompt += `- Dig deeper into their technical knowledge\n`;
+        if (topicInfo) {
+          prompt += `Ask a specific question about ${topicInfo}. `;
+          prompt += `Mix both technical and non-technical aspects. `;
+          if (skillsList) {
+            prompt += `You can ask about ${skillsList} if relevant, but also ask about concepts, applications, challenges, or real-world scenarios in ${topicInfo}. `;
+          } else {
+            prompt += `Ask about key concepts, practical applications, challenges, or real-world scenarios in ${topicInfo}. `;
+          }
+        } else if (skillsList) {
+          prompt += `Ask a technical question about ${skillsList}. `;
+        } else {
+          prompt += `Ask a specific question about ${roleInfo}. `;
+        }
+        prompt += `Reference their previous answers. `;
       } else if (this.interviewPhase === 'conclusion') {
-        prompt += `PHASE: Conclusion (Questions 6-7)\n`;
-        prompt += `- Ask wrap-up questions about their goals, questions for you, or career aspirations\n`;
-        prompt += `- Examples: "Do you have any questions for me?" or "What are you looking for in your next role?"\n`;
-        prompt += `- Keep it professional but friendly\n`;
+        prompt += `Ask a wrap-up question like "Do you have any questions for me?" or "What are you looking for?" `;
       } else if (this.interviewPhase === 'feedback') {
-        prompt += `PHASE: Feedback and Wrap-up\n`;
-        prompt += `- Thank them for their time\n`;
-        prompt += `- Provide constructive feedback on their interview performance\n`;
-        prompt += `- Mention 1-2 strengths you noticed\n`;
-        prompt += `- Suggest 1-2 areas for improvement\n`;
-        prompt += `- Let them know next steps (e.g., "We'll be in touch soon")\n`;
-        prompt += `- Keep it encouraging and professional (3-4 sentences)\n`;
+        prompt += `Thank them. Give brief feedback: 1-2 strengths, 1-2 areas to improve. Mention next steps. `;
       }
       
-      prompt += `\nBe natural, human-like, and conversational. Don't sound robotic. `;
-      prompt += `Keep your response to 1-2 sentences for questions, 3-4 sentences for feedback phase.`;
+      prompt += `Keep it natural and conversational (1-2 sentences).`;
     } else {
       // User mentioned interview but we're not in interview mode yet
       prompt += `The candidate wants to start an interview. Ask them what position they're applying for. `;
@@ -731,26 +735,107 @@ Respond with just the feedback text, no additional formatting.`;
   }
 
 
-  // Extract interview context from user message
+  // Extract topic/field from conversation - dynamic extraction
+  extractTopicFromConversation() {
+    if (!this.interviewContext) return null;
+    
+    // Combine all conversation text
+    const allText = [
+      ...this.interviewAnswers.map(qa => qa.answer),
+      this.interviewContext.role || '',
+      this.interviewContext.industry || ''
+    ].join(' ').toLowerCase();
+    
+    // Comprehensive topic/field extraction
+    const topics = [
+      // Technical fields
+      'machine learning', 'ml', 'deep learning', 'neural networks', 'ai', 'artificial intelligence',
+      'data science', 'data analytics', 'big data', 'data engineering',
+      'web development', 'web dev', 'frontend', 'backend', 'full stack', 'fullstack',
+      'mobile development', 'ios development', 'android development',
+      'devops', 'cloud computing', 'cybersecurity', 'security',
+      'blockchain', 'cryptocurrency', 'web3',
+      // Business fields
+      'marketing', 'digital marketing', 'content marketing', 'social media marketing',
+      'sales', 'business development', 'account management',
+      'product management', 'project management',
+      'consulting', 'management consulting', 'strategy',
+      'finance', 'banking', 'investment', 'accounting',
+      'human resources', 'hr', 'recruiting', 'talent acquisition',
+      // Healthcare
+      'healthcare', 'medical', 'nursing', 'pharmacy', 'public health',
+      // Education
+      'education', 'teaching', 'curriculum', 'academic',
+      // Other
+      'operations', 'supply chain', 'logistics',
+      'legal', 'law', 'compliance',
+      'real estate', 'property',
+      'hospitality', 'tourism'
+    ];
+    
+    // Find topics mentioned (longer matches first)
+    const sortedTopics = topics.sort((a, b) => b.length - a.length);
+    for (const topic of sortedTopics) {
+      if (allText.includes(topic)) {
+        return topic;
+      }
+    }
+    
+    return null;
+  }
+
+  // Extract interview context from user message - dynamic, no hardcoding
   extractInterviewContext(message) {
     const lower = message.toLowerCase();
     const context = {
       role: null,
       industry: null,
+      topic: null, // Main topic/field they're discussing
       experience: 'intermediate',
       skills: []
     };
     
-    // Extract role
+    // Extract role - more flexible patterns
     const rolePatterns = [
-      /(?:for|as|applying for|position|role|job|role of)\s+(?:a|an|the)?\s*([a-z\s]+?)(?:position|role|job|interview|$)/i,
-      /(?:software|web|frontend|backend|full.?stack|data|machine learning|ML|AI|devops|cloud|security|mobile|ios|android|react|node|python|java|javascript|typescript)\s+(?:developer|engineer|programmer|specialist|architect|analyst|scientist|consultant)/i
+      /(?:for|as|applying for|position|role|job|role of|interested in|want|practice|questions about)\s+(?:a|an|the)?\s*([a-z\s]+?)(?:\s+(?:position|role|job|interview|developer|engineer|manager|analyst|specialist|consultant|director|executive|coordinator|assistant|associate|lead|senior|junior))?$/i,
+      /(?:ask me|questions|interview me|practice)\s+(?:about|on|for|related to)\s+([a-z\s]+?)(?:\s+(?:position|role|job|interview|developer|engineer|manager))?$/i,
+      /([a-z\s]+?)\s+(?:developer|engineer|programmer|manager|analyst|specialist|consultant|director|executive|coordinator|assistant|associate|lead|scientist|researcher)/i
     ];
     
     for (const pattern of rolePatterns) {
       const match = message.match(pattern);
-      if (match) {
-        context.role = match[1]?.trim() || match[0]?.trim();
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        if (extracted.length > 2 && !['a', 'an', 'the', 'for', 'as', 'about', 'on'].includes(extracted.toLowerCase())) {
+          context.role = extracted;
+          break;
+        }
+      }
+    }
+    
+    // Extract topic/field dynamically from what they mention
+    const topicKeywords = [
+      'machine learning', 'ml', 'deep learning', 'neural networks', 'ai', 'artificial intelligence',
+      'data science', 'data analytics', 'big data', 'data engineering',
+      'web development', 'web dev', 'frontend', 'backend', 'full stack', 'fullstack',
+      'mobile development', 'ios', 'android',
+      'devops', 'cloud', 'cybersecurity', 'security',
+      'blockchain', 'crypto', 'web3',
+      'marketing', 'digital marketing', 'sales', 'business development',
+      'product management', 'project management',
+      'consulting', 'finance', 'banking', 'accounting',
+      'human resources', 'hr', 'recruiting',
+      'healthcare', 'medical', 'nursing', 'pharmacy',
+      'education', 'teaching',
+      'operations', 'supply chain', 'logistics',
+      'legal', 'law', 'real estate', 'hospitality'
+    ];
+    
+    // Check for topics (longer matches first)
+    const sortedTopics = topicKeywords.sort((a, b) => b.length - a.length);
+    for (const topic of sortedTopics) {
+      if (lower.includes(topic)) {
+        context.topic = topic;
         break;
       }
     }
@@ -758,7 +843,7 @@ Respond with just the feedback text, no additional formatting.`;
     // Extract industry
     const industries = ['technology', 'tech', 'finance', 'healthcare', 'education', 'retail', 'consulting', 'startup', 'enterprise'];
     for (const industry of industries) {
-      if (lower.includes(industry)) {
+      if (lower.includes(industry) && !context.topic) {
         context.industry = industry;
         break;
       }
@@ -771,15 +856,38 @@ Respond with just the feedback text, no additional formatting.`;
       context.experience = 'junior';
     }
     
-    // Extract skills
-    const commonSkills = ['javascript', 'python', 'react', 'node', 'java', 'sql', 'aws', 'docker', 'kubernetes', 'typescript', 'angular', 'vue'];
-    for (const skill of commonSkills) {
-      if (lower.includes(skill)) {
-        context.skills.push(skill);
-      }
-    }
+    // Skills extracted via extractTechnologies - don't hardcode here
     
     return context;
+  }
+
+  // Extract topic from a single message
+  extractTopicFromMessage(message) {
+    const lower = message.toLowerCase();
+    const topicKeywords = [
+      'machine learning', 'ml', 'deep learning', 'neural networks', 'ai', 'artificial intelligence',
+      'data science', 'data analytics', 'big data', 'data engineering',
+      'web development', 'web dev', 'frontend', 'backend', 'full stack', 'fullstack',
+      'mobile development', 'ios', 'android',
+      'devops', 'cloud', 'cybersecurity', 'security',
+      'blockchain', 'crypto', 'web3',
+      'marketing', 'digital marketing', 'sales', 'business development',
+      'product management', 'project management',
+      'consulting', 'finance', 'banking', 'accounting',
+      'human resources', 'hr', 'recruiting',
+      'healthcare', 'medical', 'nursing', 'pharmacy',
+      'education', 'teaching',
+      'operations', 'supply chain', 'logistics',
+      'legal', 'law', 'real estate', 'hospitality'
+    ];
+    
+    const sortedTopics = topicKeywords.sort((a, b) => b.length - a.length);
+    for (const topic of sortedTopics) {
+      if (lower.includes(topic)) {
+        return topic;
+      }
+    }
+    return null;
   }
 
   // Extract technologies and skills from user message
@@ -889,45 +997,29 @@ Respond with just the feedback text, no additional formatting.`;
         `Q: ${qa.question}\nA: ${qa.answer.substring(0, 150)}`
       ).join('\n\n');
       
-      const skillsList = contextToUse.skills?.length > 0 ? contextToUse.skills.join(', ') : 'general development';
       const roleInfo = contextToUse.role || 'position';
+      const topicInfo = contextToUse.topic || contextToUse.industry || this.extractTopicFromConversation() || null;
+      const skillsList = contextToUse.skills?.length > 0 ? contextToUse.skills.join(', ') : null;
       const currentPhase = this.getInterviewPhase();
       
-      const prompt = `You are a technical interviewer. Generate ONE interview question based on the current phase.
+      const prompt = `Generate ONE interview question.
 
 Role: ${roleInfo}
-Technologies mentioned: ${skillsList}
-Industry: ${contextToUse.industry || 'general'}
-Current Phase: ${currentPhase}
+${topicInfo ? `Topic: ${topicInfo}` : ''}
+${skillsList ? `Technologies: ${skillsList}` : ''}
+Phase: ${currentPhase}
 Question ${this.interviewQuestionIndex + 1} of 7
 
-${recentAnswers ? `Recent conversation:\n${recentAnswers}\n\n` : ''}
+${recentAnswers ? `Recent:\n${recentAnswers}\n\n` : ''}
 
-Phase-specific guidelines:
-${currentPhase === 'introduction' ? `
-- Ask friendly, introductory questions
-- Examples: "Tell me about yourself", "What got you interested in [role]?", "Walk me through your background"
-- Keep it conversational and warm
-` : currentPhase === 'generic' ? `
-- Ask behavioral or general professional questions
-- Examples: "Tell me about a challenging project", "How do you handle deadlines?", "Describe a time you had to learn something new quickly"
-- Reference their previous answers naturally
-` : currentPhase === 'technical' ? `
-- Ask SPECIFIC technical questions about ${roleInfo} and ${skillsList}
-- Focus on: architecture, design patterns, specific technologies, problem-solving, best practices
-- Examples: "How would you handle [technical challenge] in [technology]?", "Explain the difference between [concept A] and [concept B]", "Walk me through implementing [feature]"
-- Make it deep and technical - not generic
-` : currentPhase === 'conclusion' ? `
-- Ask wrap-up questions: "Do you have any questions for me?", "What are you looking for in your next role?", "What interests you about this position?"
-` : `
-- Provide feedback and wrap up
-`}
+${currentPhase === 'introduction' ? `Ask a friendly introductory question about ${topicInfo || roleInfo}.` : ''}
+${currentPhase === 'generic' ? `Ask a behavioral question about ${topicInfo || roleInfo}. Reference their answers.` : ''}
+${currentPhase === 'technical' ? topicInfo ? `Ask a question about ${topicInfo}. Mix technical and non-technical aspects - concepts, applications, challenges, real-world scenarios. ${skillsList ? `Can mention ${skillsList} if relevant.` : ''}` : skillsList ? `Ask a technical question about ${skillsList}.` : `Ask a specific question about ${roleInfo}.` : ''}
+${currentPhase === 'conclusion' ? `Ask a wrap-up question.` : ''}
+${currentPhase === 'feedback' ? `Provide feedback and wrap up.` : ''}
 
-- Ask a NEW question (not already asked: ${usedQuestions.slice(-3).join(', ')})
-- Reference their previous answers when relevant
-- Be natural and human-like
-
-Return ONLY the question, nothing else.`;
+Don't repeat: ${usedQuestions.slice(-3).join(', ')}
+Be natural. Return ONLY the question.`;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
